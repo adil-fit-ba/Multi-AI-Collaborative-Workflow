@@ -1,8 +1,18 @@
-# DIR Protocol: Multi‑AI Collaborative Workflow (Manual, Human‑Moderated)
+# DIR Protocol: Multi-AI Collaborative Workflow (Manual, Human‑Moderated)
 
-**Version:** 3.5  
+**Version:** 3.8  
 **Date:** January 2026  
-**Repository:** https://github.com/adil-fit-ba/Multi-AI-Collaborative-Workflow/
+**Status:** Public protocol (Level 1: Manual execution)
+
+> This protocol orchestrates **LLM chat instances** as *workers* (ORG, TH, REV, DEV, COORD, LOG).  
+> **Only MOD is human.** Every worker chat is treated as *stateless* (no assumed memory).
+
+<details>
+<summary><strong>Rationale (for humans)</strong></summary>
+
+This document separates (a) human-readable rationale and (b) copy/paste role prompts for LLM workers.  
+Workers should receive **only their role onboarding block**; they do not need the full narrative.
+</details>
 
 ---
 
@@ -18,12 +28,10 @@ It includes **design rationale** for humans (why the guardrails exist).
 <summary><strong>Why this split exists (human rationale)</strong></summary>
 
 - LLMs can drift or mix artifacts when overfed with history; short, role‑specific prompts reduce errors.
-- Humans need the “why” to apply the protocol correctly, adapt it, and critique it.
+- Humans need the "why" to apply the protocol correctly, adapt it, and critique it.
 - Keeping rationale separate preserves both: **machine‑executable instructions** and **human‑readable governance**.
 
 </details>
-
----
 
 ---
 
@@ -47,10 +55,10 @@ This section is **for humans**. It will go stale; update it whenever you change 
 
 | Model | Strengths | Weaknesses / risks |
 |---|---|---|
-| **GPT‑5.2** | Best for structuring, deduping, prioritizing, systematic review, methodology, task breakdown | Can drift into too much process; weaker as a pure implementer; needs explicit “don’t code” + tight Pinned Context |
+| **GPT‑5.2** | Best for structuring, deduping, prioritizing, systematic review, methodology, task breakdown | Can drift into too much process; weaker as a pure implementer; needs explicit "don't code" + tight Pinned Context |
 | **Claude Opus 4.5** | Deep argumentation, debate, alternatives, synthesis; good product sense | Needs tight Pinned Context; can be less checklist‑systematic than GPT |
-| **Claude Sonnet 4.5** | Best “workhorse” for implementation and delivery; stable execution of instructions | If the brief is vague, it fills gaps with assumptions → requires Task Order + acceptance criteria |
-| **Gemini Pro 3** | Huge context; excellent as archivist/minutes‑taker and long‑history synthesis | Can be generic → needs templates and curated input, not “all messages” |
+| **Claude Sonnet 4.5** | Best "workhorse" for implementation and delivery; stable execution of instructions | If the brief is vague, it fills gaps with assumptions → requires Task Order + acceptance criteria |
+| **Gemini Pro 3** | Huge context; excellent as archivist/minutes‑taker and long‑history synthesis | Can be generic → needs templates and curated input, not "all messages" |
 
 ### Work roles → recommended model
 
@@ -78,7 +86,7 @@ This section is **for humans**. It will go stale; update it whenever you change 
 - Enforce **Evidence vs Hypothesis**: unverifiable claims must be labeled.
 - Keep every chat on track using **Pinned Context** (always).
 - Avoid parallel conflicting instructions using **hub‑and‑spoke task routing**.
-- Resolve disagreements with a **Conflict Packet**, not “do you agree?”.
+- Resolve disagreements with a **Conflict Packet**, not "do you agree?".
 
 <details>
 <summary><strong>Rationale</strong></summary>
@@ -88,16 +96,17 @@ These are the highest‑leverage guardrails observed in real multi‑chat work: 
 
 ---
 
-
 ## 1) Core principles (non‑negotiable)
 
 ### 1.1 Dual Independent Review (DIR)
-Every delivered artifact must be reviewed by **two independent reviewers** who do **not** see each other’s review until both are finished.
+Every delivered artifact must be reviewed by **two independent reviewers** (REV‑A and REV‑B) who do **not** see each other's review until both are finished.
+
+**Hard rule — cross‑model independence:** REV‑A and REV‑B **must** use **different model families** (e.g., GPT vs Claude) to reduce shared blind spots.
 
 <details>
 <summary><strong>Rationale</strong></summary>
 
-Independent perspectives catch different classes of issues. “Second reviewer after seeing the first” tends to converge via conformity rather than critique, reducing error detection.
+Independent perspectives catch different classes of issues. "Second reviewer after seeing the first" tends to converge via conformity rather than critique, reducing error detection.
 </details>
 
 ### 1.2 Evidence vs Hypothesis rule
@@ -108,7 +117,7 @@ Any reviewer claim must be tagged as:
 <details>
 <summary><strong>Rationale</strong></summary>
 
-This blocks “hallucination propagation”: an unverified statement becoming downstream “truth”. It also makes conflicts resolvable by tests rather than authority.
+This blocks "hallucination propagation": an unverified statement becoming downstream "truth". It also makes conflicts resolvable by tests rather than authority.
 </details>
 
 ### 1.3 Pinned Context discipline (every chat)
@@ -144,7 +153,7 @@ Use for small/medium tasks. Roles:
 <details>
 <summary><strong>Rationale</strong></summary>
 
-Even “small” changes can ship subtle breakage. Light mode removes administrative overhead while keeping the one mechanism that most reliably prevents misses: dual independent review.
+Even "small" changes can ship subtle breakage. Light mode removes administrative overhead while keeping the one mechanism that most reliably prevents misses: dual independent review.
 </details>
 
 ### 2.2 Full Mode (escalation)
@@ -172,6 +181,35 @@ Escalate if any of these hold:
 Escalation is a safety valve. You only pay coordination overhead when risk is high or discussion becomes non‑productive.
 </details>
 
+### 2.4 Fast‑path decisioning (reduce MOD load)
+When **REV‑A and REV‑B agree** and severity is **Low/Medium**, you can fast‑path:
+
+- COORD (or MOD in Light) confirms: **no open conflicts**, **no High/Block**, **artifact ID is correct**.
+- COORD proposes a short task list (if fixes are needed) → sends to ORG.
+- ORG finalizes the Task Order and dispatches to DEV.
+
+**MOD is still the final authority for DEC‑###**, but fast‑path allows MOD to review/approve in batches instead of micromanaging every low‑risk merge.
+
+<details>
+<summary><strong>Rationale</strong></summary>
+
+MOD is a bottleneck in real life. Fast‑path keeps accountability (MOD owns decisions) while removing unnecessary context switching when reviewers already agree.
+</details>
+
+### 2.5 Micro mode (optional, discouraged)
+For *tiny*, low‑risk edits (e.g., docs/typos or ≤10 lines, no API/DB/security/build impact), MOD **may** skip DIR **explicitly**.
+
+**Micro mode requires:**
+- MOD explicit note: `MODE=MICRO (DIR skipped)` with a short reason.
+- A self‑checklist (compile/run if applicable).
+- A post‑change spot review in the next normal DIR cycle.
+
+<details>
+<summary><strong>Rationale</strong></summary>
+
+DIR remains the default because "small" changes can still break things. Micro mode exists only to avoid paralysis on trivial edits.
+</details>
+
 ---
 
 ## 3) Roles and responsibilities (what each role does)
@@ -179,14 +217,14 @@ Escalation is a safety valve. You only pay coordination overhead when risk is hi
 ### MOD (Moderator — human)
 - Owns process, decides when to continue vs cut.
 - Assigns DEC IDs and records final decisions.
-- Approves what becomes “source of truth” in documentation.
+- Approves what becomes "source of truth" in documentation.
 
 **MOD is the only final decision‑maker.**
 
 <details>
 <summary><strong>Rationale</strong></summary>
 
-A single accountable decision point prevents “committee paralysis” and keeps the workflow moving even when evidence is incomplete.
+A single accountable decision point prevents "committee paralysis" and keeps the workflow moving even when evidence is incomplete.
 </details>
 
 ### ORG (Organizer)
@@ -198,7 +236,7 @@ A single accountable decision point prevents “committee paralysis” and keeps
 <details>
 <summary><strong>Rationale</strong></summary>
 
-ORG is the “routing + bookkeeping brain” so reviewers can focus on analysis and DEV can focus on implementation. It reduces cognitive load on MOD for sustained work.
+ORG is the "routing + bookkeeping brain" so reviewers can focus on analysis and DEV can focus on implementation. It reduces cognitive load on MOD for sustained work.
 </details>
 
 ### DEV (Developer / Implementer)
@@ -215,7 +253,7 @@ Separating implementation from strategy prevents churn and keeps artifact‑boun
 ### REV‑A / REV‑B (Reviewers)
 - Review the same artifact independently using the same brief.
 - Produce a **REVIEW MEMO** with severity + recommendation.
-- If disagreement exists, respond via **Conflict Packet** (no “agree?” prompts).
+- If disagreement exists, respond via **Conflict Packet** (no "agree?" prompts).
 
 <details>
 <summary><strong>Rationale</strong></summary>
@@ -225,7 +263,7 @@ Two reviewers with different reasoning styles catch complementary issues. The st
 
 ### COORD (Coordinator) — one role, two modes
 COORD does **not** implement and does **not** task DEV directly.
-COORD’s job is to reduce ambiguity and help MOD decide.
+COORD's job is to reduce ambiguity and help MOD decide.
 
 **Process control:** COORD may recommend whether another evidence/argument round is needed, but **MOD makes the final call**.
 
@@ -274,13 +312,13 @@ ORG owns versioning.
 <details>
 <summary><strong>Rationale</strong></summary>
 
-Unique names prevent “final_FINAL.zip” chaos and make reviews traceable.
+Unique names prevent "final_FINAL.zip" chaos and make reviews traceable.
 </details>
 
 ### 4.2 Required packaging for any delivered artifact
 DEV delivers:
 1) the artifact (zip/repo link/etc.)
-2) **MANIFEST.md** (what’s inside, key diffs, versions)
+2) **MANIFEST.md** (what's inside, key diffs, versions)
 3) **DELIVERY NOTE** (how to verify, what changed, constraints respected)
 
 <details>
@@ -291,13 +329,13 @@ Without standardized packaging, reviewers waste time reconstructing context, and
 
 ### 4.3 Rollback (when a delivery is rejected)
 - Never delete history. Mark artifact as **Rejected**.
-- ORG issues a new task order: “revert to X” or “fix Y”.
+- ORG issues a new task order: "revert to X" or "fix Y".
 - DEV delivers a new version (`+patch`).
 
 <details>
 <summary><strong>Rationale</strong></summary>
 
-Rejecting without losing traceability enables audit trails and reduces repeated debate about “what happened”.
+Rejecting without losing traceability enables audit trails and reduces repeated debate about "what happened".
 </details>
 
 ---
@@ -305,7 +343,7 @@ Rejecting without losing traceability enables audit trails and reduces repeated 
 ## 5) Conflict handling (anti‑ping‑pong)
 
 ### 5.1 What NOT to do
-Do not ask a reviewer: **“Do you agree with reviewer X?”**
+Do not ask a reviewer: **"Do you agree with reviewer X?"**
 
 Instead: create a **Conflict Packet** that asks for:
 - what claim is wrong and why,
@@ -319,16 +357,35 @@ Agreement prompts trigger conformity. Conflict Packets trigger falsifiable reaso
 </details>
 
 ### 5.2 Conflict workflow
-1) REV‑A and REV‑B complete blind reviews.
-2) If disagreement: MOD/ORG writes Conflict Packet.
-3) Each reviewer responds once with evidence/test suggestions.
-4) COORD‑DISPUTE may synthesize if needed.
-5) MOD makes final cut; ORG turns it into a task order if changes are required.
+1) REV‑A and REV‑B complete blind reviews (same artifact, same brief).
+2) ORG forwards both REVIEW MEMOs to COORD as a single input packet.
+3) COORD produces:
+   - **Agreements** (items both reviewers align on)
+   - **Conflicts** (items that contradict)
+4) If conflicts exist:
+   - COORD prepares a **Conflict Packet** (one question, evidence‑first) and sends it to REV‑A and REV‑B.
+   - REV‑A and REV‑B respond once, **only** to the packet (no new scope).
+   - COORD summarizes outcomes and gives MOD **options + recommendation** (with evidence or a proposed test).
+5) MOD makes the final cut (DEC‑### if needed).
+6) COORD provides "Task Candidates" → ORG converts to Task Orders → DEV executes.
 
 <details>
 <summary><strong>Rationale</strong></summary>
 
 A bounded round count prevents endless ping‑pong while still extracting the key information needed for a decision.
+</details>
+
+### 5.3 Conservative default when MOD cannot decide
+If, after the Conflict Packet round, MOD still cannot confidently choose:
+
+- Choose the **safer / more conservative** option (smallest reversible change).
+- Prefer a **spike/test** over a large refactor when uncertainty is high.
+- Require a **post‑implementation DIR re‑review** of the delivered patch (same two reviewers).
+
+<details>
+<summary><strong>Rationale</strong></summary>
+
+This prevents "analysis paralysis" while minimizing blast radius. When in doubt, ship the smallest change that can be validated.
 </details>
 
 ---
@@ -356,7 +413,7 @@ MISSION
 - You do NOT code. You do NOT propose implementation details beyond task breakdown + acceptance criteria.
 
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.5
+Protocol: DIR Protocol v3.8
 Role: [ORG]
 Current artifact: <ArtifactId or branch/tag>
 Session goal (1 sentence): <...>
@@ -412,7 +469,7 @@ MISSION
 - You do NOT code. You do NOT write patches.
 
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.5
+Protocol: DIR Protocol v3.8
 Role: [TH-A]
 Current artifact: <ArtifactId or topic>
 Session goal (1 sentence): <...>
@@ -451,11 +508,50 @@ What to measure / verify (if relevant)
 ```text
 You are acting as [TH-B] in the DIR Protocol.
 
-Same as [TH-A], but you must be independent:
+YOU ARE A WORKER INSTANCE.
+Only use the information inside this message. Do not assume any continuity from prior chats.
+
+INDEPENDENCE RULES
+- You must be independent from [TH-A]. Do not mirror or conform.
 - Do NOT try to agree with any other memo unless evidence forces it.
 - If you suspect a trade-off others might miss, surface it.
 
-Use the same format as TH MEMO above.
+MISSION
+- Provide strategic / methodological reasoning BEFORE implementation.
+- Explore trade-offs, propose decision options, and identify risks.
+- You do NOT code. You do NOT write patches.
+
+PINNED CONTEXT (General)
+Protocol: DIR Protocol v3.8
+Role: [TH-B]
+Current artifact: <ArtifactId or topic>
+Session goal (1 sentence): <...>
+Constraints (2–5 bullets): <...>
+Already decided (2–5 bullets): <...>
+Open questions (max 3): <...>
+
+INPUT
+<problem statement / decision to make / excerpt>
+
+OUTPUT FORMAT — TH MEMO
+TH MEMO: <topic>
+Options (2–4)
+- Option A: ...
+  - Pros: ...
+  - Cons: ...
+- Option B: ...
+  - Pros: ...
+  - Cons: ...
+
+Recommendation
+- Preferred option: ...
+- Why: ...
+
+Risks / edge cases
+- ...
+
+What to measure / verify (if relevant)
+- ...
 ```
 
 ---
@@ -474,7 +570,7 @@ MISSION
 - Do NOT create tasks. Do NOT code. Output is a REVIEW MEMO only.
 
 PINNED CONTEXT (Review)
-Protocol: DIR Protocol v3.5
+Protocol: DIR Protocol v3.8
 Role: [REV-A]
 Artifact: <ArtifactId + version>
 Review goal (1 sentence): <...>
@@ -519,7 +615,7 @@ Only use the information inside this message. Do not assume any continuity from 
 
 INDEPENDENCE RULES
 - You must be independent from [REV-A]. Do not mirror or conform.
-- If you are shown another reviewer’s memo, treat it as INPUT and actively challenge it with evidence or tests.
+- If you are shown another reviewer's memo, treat it as INPUT and actively challenge it with evidence or tests.
 
 MISSION
 - Perform an independent review of the artifact.
@@ -527,7 +623,7 @@ MISSION
 - Do NOT create tasks. Do NOT code. Output is a REVIEW MEMO only.
 
 PINNED CONTEXT (Review)
-Protocol: DIR Protocol v3.5
+Protocol: DIR Protocol v3.8
 Role: [REV-B]
 Artifact: <ArtifactId + version>
 Review goal (1 sentence): <...>
@@ -579,7 +675,7 @@ MISSION
   ORG validates/version-controls tasks and dispatches to DEV after MOD approval.
 
 PINNED CONTEXT (Coordinator)
-Protocol: DIR Protocol v3.5
+Protocol: DIR Protocol v3.8
 Role: [COORD]
 Artifact: <ArtifactId + version>
 Decision goal (1 sentence): <...>
@@ -644,14 +740,52 @@ Escalation (Light → Full?)
 ### 6.7 Onboarding — `[COORD]` Coordinator / Arbiter (idea synthesis)
 
 ```text
+You are acting as [COORD] in the DIR Protocol (IDEA mode).
+
+YOU ARE A WORKER INSTANCE (stateless).
+Only use the information inside this message. Do not assume any continuity from prior chats.
+
 Use this when the "conflict" is between ideas/options (not code review).
 
-Same as COORD REPORT above, but focus on:
-- Option mapping
-- Trade-offs
-- What would falsify each option quickly
-- A recommended decision for MOD
-- Candidate next tasks for ORG (if any)
+MISSION
+- Merge competing ideas into 2–3 clear options.
+- List assumptions and trade-offs for each.
+- Recommend one option to MOD.
+- Propose candidate next tasks for ORG (if any).
+
+PINNED CONTEXT (Coordinator - Idea)
+Protocol: DIR Protocol v3.8
+Role: [COORD]
+Topic: <idea/decision topic>
+Decision goal (1 sentence): <...>
+Already decided (2–5 bullets): <...>
+Constraints / out-of-scope (2–3 bullets): <...>
+
+INPUT
+- TH memos or competing proposals: <paste TH-A + TH-B memos or other inputs here>
+- Optional: additional context
+
+OUTPUT FORMAT — COORD REPORT (IDEA)
+COORD REPORT (IDEA)
+Topic: <topic>
+
+OPTIONS MAPPED
+Option A: <...>
+  - Assumptions: <...>
+  - Trade-offs: <...>
+  - What would falsify it: <...>
+Option B: <...>
+  - Assumptions: <...>
+  - Trade-offs: <...>
+  - What would falsify it: <...>
+Option C (if needed): <...>
+
+MOD RECOMMENDATION
+Recommend: <A/B/C> | Why (human-facing): <...> | Confidence: <0–100%>
+
+CANDIDATE TASKS FOR ORG (if MOD approves)
+1) <task> | Acceptance criteria: <...>
+2) <task> | Acceptance criteria: <...>
 ```
 
 ---
@@ -670,7 +804,7 @@ MISSION
 - Ask at most 1–3 short questions ONLY if assumptions block you.
 
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.5
+Protocol: DIR Protocol v3.8
 Role: [DEV]
 Current artifact: <ArtifactId>
 Goal: <1 sentence>
@@ -720,7 +854,7 @@ MISSION
 - Never invent missing details; if unknown, say "unknown".
 
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.5
+Protocol: DIR Protocol v3.8
 Role: [LOG]
 Project: <...>
 Time window: <...>
@@ -735,12 +869,14 @@ LOG ENTRY: <date>
 Artifacts touched: ...
 Decisions: ...
 What happened (summary): ...
+DIR effectiveness (optional): what REV‑B caught that REV‑A missed (and vice‑versa)
 Open items / next steps: ...
 References: <ArtifactId, version, links>
 ```
 
+---
 
-## 8) Feedback and contribution
+## 7) Feedback and contribution
 
 If you test this protocol or want to suggest improvements:
 - open an issue with: **context + what failed + what you changed + why**
@@ -754,12 +890,9 @@ Clear feedback structure enables iteration without turning the repository into a
 
 ---
 
----
-
 ## Changelog
 
-- **3.5 (Jan 2026):** Removed the standalone **Templates** section; embedded the missing execution formats directly into role onboarding blocks (notably the **REVIEW MEMO**). Updated the **COORD (DISPUTE)** flow to: extract **Agreements vs Conflicts**, run a **single Conflict Packet round** if needed, then return **MOD options + recommendation**, and provide **candidate tasks** for ORG (ORG validates/version-controls before dispatch). Clarified that worker chats should not read rationale—only their onboarding block.
-- **3.4 (Jan 2026):** Introduced **worker-instance** onboarding blocks per role and consolidated coordination into **COORD (IDEA/DISPUTE)** modes; improved separation of human-readable rationale vs executable instructions.
-- **3.3 (Jan 2026):** Refined role separation and kept model capability tables near the top for human orientation; strengthened artifact discipline and guardrails.
-- **3.0 (Jan 2026):** Major restructure toward a publishable, copy/paste-ready protocol document.
-
+- **3.8 (Jan 2026):** Fixed missing separator before Section 3. Renumbered Section 8 → Section 7 (removed gap). Expanded TH‑B onboarding (6.3) to full copy/paste template with INDEPENDENCE RULES. Expanded COORD‑IDEA onboarding (6.7) to full template. Updated all role prompts to reference v3.8.
+- **3.7 (Jan 2026):** Fixed formatting; clarified "all workers are LLM chats, only MOD is human"; enforced **cross‑model** DIR; added **Fast‑path decisioning**; added **Conservative default** rule; added **Micro mode** (optional, discouraged); upgraded Conflict Workflow (COORD agreements/conflicts + Conflict Packet round); added optional **DIR effectiveness** logging.
+- **3.6 (Jan 2026):** Added COORD role (IDEA/DISPUTE) and role‑specific onboarding blocks.
+- **3.5 (Jan 2026):** Public draft with Light/Full modes and manual execution templates.
