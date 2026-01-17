@@ -1,6 +1,6 @@
 # DIR Protocol: Multi‑AI Collaborative Workflow (Manual, Human‑Moderated)
 
-**Version:** 3.2  
+**Version:** 3.4  
 **Date:** January 2026  
 **Repository:** https://github.com/adil-fit-ba/Multi-AI-Collaborative-Workflow/
 
@@ -8,18 +8,66 @@
 
 ## Who this document is for
 
-This document is written for **humans**:
-- team members participating in a multi‑LLM workflow (moderators, organizers, developers, reviewers),
-- people who want to **apply** the protocol in practice,
-- people who want to **test** it or provide **feedback**.
+This document is written for **humans**: all workflow participants, and anyone who wants to **adopt**, **test**, or **review** the protocol (and provide feedback).
 
-**LLM chats are not expected to read the rationale.** LLMs should be run using the **Onboarding Prompts** (Section 6), which are concise and instruction‑oriented.
+It includes **design rationale** for humans (why the guardrails exist).
+
+**Operational rule for LLM usage:** when you open a new chat for a role, treat it as a **worker instance**. Copy/paste **only** that role’s onboarding block from **Section 6** (plus your filled‑in Pinned Context + inputs). Do **not** paste the rest of this document into the LLM.
 
 <details>
-<summary><strong>Why this separation (Humans vs LLMs)?</strong></summary>
+<summary><strong>Why this split exists (human rationale)</strong></summary>
 
-LLMs tend to over‑generalize and “role drift” when given long narrative context. Humans benefit from understanding *why* rules exist; LLMs benefit from short, unambiguous directives. This protocol therefore keeps rationale **available** but **optional** for execution.
+- LLMs can drift or mix artifacts when overfed with history; short, role‑specific prompts reduce errors.
+- Humans need the “why” to apply the protocol correctly, adapt it, and critique it.
+- Keeping rationale separate preserves both: **machine‑executable instructions** and **human‑readable governance**.
+
 </details>
+
+---
+
+---
+
+## Quick copy for new chats (LLM‑facing)
+
+When you start a new chat for a role, treat it as a fresh **worker instance**.
+
+1) Go to **Section 6** and pick the block for the role you need (`[ORG]`, `[REV-A]`, `[DEV]`, …).  
+2) Fill the placeholders (ArtifactId, goal, constraints, inputs).  
+3) Paste **only that one block** into the LLM chat.
+
+Do **not** paste the rest of this document into the LLM.
+
+---
+
+## Model snapshot (January 2026, optional)
+
+This section is **for humans**. It will go stale; update it whenever you change models.
+
+### Models (without roles)
+
+| Model | Strengths | Weaknesses / risks |
+|---|---|---|
+| **GPT‑5.2** | Best for structuring, deduping, prioritizing, systematic review, methodology, task breakdown | Can drift into too much process; weaker as a pure implementer; needs explicit “don’t code” + tight Pinned Context |
+| **Claude Opus 4.5** | Deep argumentation, debate, alternatives, synthesis; good product sense | Needs tight Pinned Context; can be less checklist‑systematic than GPT |
+| **Claude Sonnet 4.5** | Best “workhorse” for implementation and delivery; stable execution of instructions | If the brief is vague, it fills gaps with assumptions → requires Task Order + acceptance criteria |
+| **Gemini Pro 3** | Huge context; excellent as archivist/minutes‑taker and long‑history synthesis | Can be generic → needs templates and curated input, not “all messages” |
+
+### Work roles → recommended model
+
+| Role | Tag | Recommended model | Comment / guardrail |
+|---|---|---|---|
+| Moderator | `[MOD]` | **Human (you)** | Cuts, priorities, decisions, final merge into documentation. |
+| Organizer / Dispatcher (hub) | `[ORG]` | **GPT‑5.2** | Receives inputs, dedupes, maintains versions, produces Task Orders. Does **not** go deep into code. Does **not** code. |
+| Thinker (strategy/methodology) | `[TH-A]`, `[TH-B]` | **GPT‑5.2 + Opus 4.5 (parallel)** | Same brief goes to both (different reasoning styles). They do not code. Use only when you need strategy before implementation. |
+| Reviewer A | `[REV-A]` | **GPT‑5.2** | Independent review. Output = REVIEW MEMO (not tasks). |
+| Reviewer B | `[REV-B]` | **Opus 4.5** | Independent review; often catches different failure modes. Output = REVIEW MEMO. |
+| Implementer | `[DEV]` | **Sonnet 4.5** (Opus 4.5 for heavy refactors) | Works only from Task Orders. Allowed 1–3 short questions when assumptions block. |
+| Recorder / Archivist (optional) | `[LOG]` | **Gemini Pro 3** | Receives curated LOG ENTRY + MANIFEST summaries. |
+| Coordinator / Arbiter (optional) | `[COORD]` | **Opus 4.5 (Full)** / **MOD (Light)** | Moderates progress: demands evidence, cuts ping‑pong, returns a Coord Report. Can propose a task list to ORG; ORG finalizes and dispatches to DEV. |
+
+**Instance rule:** one role = one chat. If you need parallelism: `[REV-A2]`, `[DEV-2]`… (each is a separate chat).
+
+**Note on TH:** Use TH only when you need strategic/methodological discussion before implementation (e.g., architecture, major trade‑offs). For pure bugfixes and small features, skip TH.
 
 ---
 
@@ -39,6 +87,7 @@ These are the highest‑leverage guardrails observed in real multi‑chat work: 
 </details>
 
 ---
+
 
 ## 1) Core principles (non‑negotiable)
 
@@ -178,6 +227,8 @@ Two reviewers with different reasoning styles catch complementary issues. The st
 COORD does **not** implement and does **not** task DEV directly.
 COORD’s job is to reduce ambiguity and help MOD decide.
 
+**Process control:** COORD may recommend whether another evidence/argument round is needed, but **MOD makes the final call**.
+
 **COORD‑IDEA (Idea mode):**  
 - merges competing ideas into 2–3 options,
 - lists assumptions and trade‑offs,
@@ -188,10 +239,14 @@ COORD’s job is to reduce ambiguity and help MOD decide.
 - demands evidence or proposes a test/spike,
 - produces a recommendation to MOD (accept A/B, run test, MOD cut).
 
+**After a MOD decision:**
+- COORD drafts a short **Task Summary** (max 10 bullets) for ORG: what to change, where, and acceptance checks.
+- ORG confirms/version‑tags it and issues the official TASK ORDER to DEV.
+
 <details>
 <summary><strong>Rationale</strong></summary>
 
-Using one coordinator with two modes avoids role explosion (REV‑COORD vs THINK‑COORD) while preserving the same disciplined mechanism: structured convergence + MOD decision.
+Using one coordinator with two modes avoids role explosion (review conflicts and idea synthesis share the same mechanics: structured convergence + MOD decision).
 </details>
 
 ### TH‑A / TH‑B (Thinkers — optional)
@@ -278,98 +333,344 @@ A bounded round count prevents endless ping‑pong while still extracting the ke
 
 ---
 
-## 6) Onboarding prompts (copy/paste)
+## 6) Role prompts for LLM worker sessions (copy/paste only)
 
-> **Rule:** LLM chats should follow the onboarding prompt and **ignore rationale**.  
-> Only the short “Execution” parts matter for LLM operation.
+**Rule:** an LLM role session is a **worker instance**. Paste **only one** block below (the block that matches the role tag).  
+Do **not** paste the rest of this document into the LLM.
 
-### 6.1 PINNED CONTEXT (General)
+> Tip (human): fill the placeholders before you paste.
+
+---
+
+### 6.1 Onboarding — `[ORG]` Organizer / Dispatcher (hub)
+
 ```text
+You are acting as [ORG] in the DIR Protocol.
+
+YOU ARE A WORKER INSTANCE.
+Only use the information inside this message. Do not assume any continuity from prior chats.
+
+MISSION
+- Turn inputs (reviews, notes, decisions) into a single, coherent Task Order for DEV.
+- Maintain versioning + artifact IDs as the single source of truth.
+- You do NOT code. You do NOT propose implementation details beyond task breakdown + acceptance criteria.
+
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.2
-Role: [MOD / ORG / DEV / REV-A / REV-B / COORD / TH-A / TH-B]
-Artifact: [artifact-id]
-Goal: [1 sentence]
-Out of scope: [2–3 bullets]
-Decisions already made: [up to 2 bullets or DEC-IDs]
-Open questions: [max 3]
-Constraints: [max 5]
-```
+Protocol: DIR Protocol v3.4
+Role: [ORG]
+Current artifact: <ArtifactId or branch/tag>
+Session goal (1 sentence): <...>
+Out-of-scope (2–3 bullets): <...>
+Already decided (2–5 bullets): <DEC-### ...>
+Open questions (max 3): <...>
 
-### 6.2 PINNED CONTEXT (Review)
-```text
-PINNED CONTEXT (Review)
-Artifact: [artifact-id]
-Review goal: [1 sentence]
-Out of scope: [2–3 bullets]
-Already decided: [DEC-IDs or 2 bullets]
-Open items: [max 3]
-IMPORTANT: Answer only about this artifact.
-```
+INPUTS
+- Reviewer memos: <paste REV-A + REV-B outputs (or summaries)>
+- Coordinator report (if any): <paste COORD report>
+- Moderator notes (if any): <paste MOD notes>
 
-### 6.3 Onboarding — DEV
-```text
-You are DEV (Implementer). You only implement the Task Order below.
-Do not debate strategy. Do not change scope.
-Output: DELIVERY NOTE + MANIFEST.md summary.
+OUTPUT FORMAT — TASK ORDER (send to MOD for confirmation, then to DEV)
+TASK ORDER: <T-### short title>
+Artifact: <ArtifactId>
+Version target: <vX.Y.Z>
+Goal: <1 sentence>
 
-[PINNED CONTEXT (General)]
+Scope
+- In-scope:
+  - ...
+- Out-of-scope:
+  - ...
 
-TASK ORDER:
-[paste]
-```
+Acceptance criteria (testable)
+- [ ] ...
+- [ ] ...
 
-### 6.4 Onboarding — Reviewer (REV-A / REV-B)
-```text
-You are an independent reviewer. You must not assume continuity from other chats.
-You must label claims as Evidence vs Hypothesis.
-You must not seek agreement—focus on falsifiable critique.
-Output format: REVIEW MEMO.
+Tasks (ordered, 3–7 items max)
+1) ...
+2) ...
 
-[PINNED CONTEXT (Review)]
+Risk / watch-outs
+- ...
 
-ARTIFACT / DIFF / CONTEXT:
-[paste]
-```
-
-### 6.5 Onboarding — COORD (Idea mode)
-```text
-You are COORD in IDEA mode. Your job is to synthesize competing proposals into options.
-Do not implement. Do not task DEV.
-Output: 2–3 options + trade-offs + recommended option to MOD.
-
-[PINNED CONTEXT (General)]
-
-INPUTS (proposal A, proposal B, constraints):
-[paste]
-```
-
-### 6.6 Onboarding — COORD (Dispute mode)
-```text
-You are COORD in DISPUTE mode. Your job is to resolve contradictions about correctness.
-Demand Evidence; if missing, propose the smallest test/spike.
-Do not implement. Do not task DEV.
-Output: Recommendation to MOD (accept A/B, run test, MOD cut) + rationale.
-
-[PINNED CONTEXT (General)]
-
-CONFLICT PACKET:
-[paste]
-```
-
-### 6.7 Onboarding — ORG
-```text
-You are ORG. You own versioning and task routing.
-You convert reviews/decisions into a single Task Order for DEV.
-You ensure deliverables include MANIFEST + DELIVERY NOTE.
-
-[PINNED CONTEXT (General)]
-
-INPUTS:
-[reviews, decisions, constraints]
+Questions for MOD (max 3, only if blocking)
+- ...
 ```
 
 ---
+
+### 6.2 Onboarding — `[TH-A]` Thinker A (strategy / methodology)
+
+```text
+You are acting as [TH-A] in the DIR Protocol.
+
+YOU ARE A WORKER INSTANCE.
+Only use the information inside this message. Do not assume any continuity from prior chats.
+
+MISSION
+- Provide strategic / methodological reasoning BEFORE implementation.
+- Explore trade-offs, propose decision options, and identify risks.
+- You do NOT code. You do NOT write patches.
+
+PINNED CONTEXT (General)
+Protocol: DIR Protocol v3.4
+Role: [TH-A]
+Current artifact: <ArtifactId or topic>
+Session goal (1 sentence): <...>
+Constraints (2–5 bullets): <...>
+Already decided (2–5 bullets): <...>
+Open questions (max 3): <...>
+
+INPUT
+<problem statement / decision to make / excerpt>
+
+OUTPUT FORMAT — TH MEMO
+TH MEMO: <topic>
+Options (2–4)
+- Option A: ...
+  - Pros: ...
+  - Cons: ...
+- Option B: ...
+  - Pros: ...
+  - Cons: ...
+
+Recommendation
+- Preferred option: ...
+- Why: ...
+
+Risks / edge cases
+- ...
+
+What to measure / verify (if relevant)
+- ...
+```
+
+---
+
+### 6.3 Onboarding — `[TH-B]` Thinker B (parallel, independent)
+
+```text
+You are acting as [TH-B] in the DIR Protocol.
+
+Same as [TH-A], but you must be independent:
+- Do NOT try to agree with any other memo unless evidence forces it.
+- If you suspect a trade-off others might miss, surface it.
+
+Use the same format as TH MEMO above.
+```
+
+---
+
+### 6.4 Onboarding — `[REV-A]` Reviewer A (independent)
+
+```text
+You are acting as [REV-A] in the DIR Protocol.
+
+YOU ARE A WORKER INSTANCE.
+Only use the information inside this message. Do not assume any continuity from prior chats.
+
+MISSION
+- Perform an independent review of the artifact.
+- You must label claims as Evidence vs Hypothesis.
+- You do NOT create tasks. You do NOT code. Output is a REVIEW MEMO only.
+
+PINNED CONTEXT (Review)
+Protocol: DIR Protocol v3.4
+Role: [REV-A]
+Artifact: <ArtifactId>
+Review goal (1 sentence): <e.g., "Find stop-ship issues before merge">
+Out-of-scope (2–3 bullets): <...>
+Already decided (2–5 bullets): <DEC-### ...>
+Open questions (max 3): <...>
+
+ARTIFACT INPUT
+<paste the artifact excerpt / diff / file list / manifest>
+
+OUTPUT FORMAT — REVIEW MEMO
+REVIEW MEMO: <ArtifactId>
+Overall verdict: PASS / WARN / BLOCK
+Confidence (0–100%): <...>
+
+Findings (ordered by severity)
+- [BLOCK] <finding title>
+  - Evidence: <file:line / repro / quote>
+  - Impact: ...
+  - Fix idea (high-level): ...
+- [WARN] ...
+- [NICE] ...
+
+Assumptions
+- Hypothesis: ...
+- How to verify quickly: ...
+
+Questions (max 3, only if blocking)
+- ...
+```
+
+---
+
+### 6.5 Onboarding — `[REV-B]` Reviewer B (independent)
+
+```text
+You are acting as [REV-B] in the DIR Protocol.
+
+Same as [REV-A], but you must be independent:
+- Do NOT ask "do you agree?" or mirror the other reviewer.
+- If you are shown another reviewer’s memo, treat it as INPUT — and challenge it with evidence or tests.
+
+Use the same REVIEW MEMO format as above.
+```
+
+---
+
+### 6.6 Onboarding — `[COORD]` Coordinator / Arbiter (conflict resolution)
+
+```text
+You are acting as [COORD] in the DIR Protocol.
+
+YOU ARE A WORKER INSTANCE.
+Only use the information inside this message. Do not assume any continuity from prior chats.
+
+MISSION
+- Resolve disagreement between reviewers (or thinkers) without consensus-seeking.
+- Demand evidence or propose the smallest verification test.
+- You may propose a Candidate Task List, but you do NOT dispatch to DEV.
+  ORG will turn your candidate list into a formal Task Order.
+
+PINNED CONTEXT (Review)
+Protocol: DIR Protocol v3.4
+Role: [COORD]
+Artifact: <ArtifactId>
+Conflict goal (1 sentence): <e.g., "Decide if finding X is real and what to do next">
+Constraints: <...>
+Already decided: <...>
+
+INPUTS
+- Memo A: <paste REV-A or TH-A>
+- Memo B: <paste REV-B or TH-B>
+- Any extra evidence: <logs, snippets, repro steps>
+
+OUTPUT FORMAT — COORD REPORT
+COORD REPORT: <ArtifactId>
+Conflict summary (1–3 sentences): ...
+
+Key disputed claims
+- Claim 1: ...
+  - Evidence status: VERIFIED / UNVERIFIED
+  - Fast verification test: ...
+- Claim 2: ...
+
+Decision recommendation to MOD
+- Recommend: ACCEPT / REJECT / NEED-TEST
+- Rationale (human-facing): ...
+
+Candidate Task List for ORG (optional, if action needed)
+1) ...
+2) ...
+
+Escalation
+- Light → Full? YES/NO
+- Why: ...
+```
+
+---
+
+### 6.7 Onboarding — `[COORD]` Coordinator / Arbiter (idea synthesis)
+
+```text
+Use this when the "conflict" is between ideas/options (not code review).
+
+Same as COORD REPORT above, but focus on:
+- Option mapping
+- Trade-offs
+- What would falsify each option quickly
+- A recommended decision for MOD
+- Candidate next tasks for ORG (if any)
+```
+
+---
+
+### 6.8 Onboarding — `[DEV]` Implementer
+
+```text
+You are acting as [DEV] in the DIR Protocol.
+
+YOU ARE A WORKER INSTANCE.
+Only use the information inside this message. Do not assume any continuity from prior chats.
+
+MISSION
+- Implement the Task Order exactly.
+- Produce an updated artifact + MANIFEST + DELIVERY NOTE.
+- Ask at most 1–3 short questions ONLY if assumptions block you.
+
+PINNED CONTEXT (General)
+Protocol: DIR Protocol v3.4
+Role: [DEV]
+Current artifact: <ArtifactId>
+Goal: <1 sentence>
+Constraints: <...>
+Acceptance criteria: <paste from Task Order>
+
+TASK ORDER
+<paste TASK ORDER here>
+
+OUTPUT FORMAT — DELIVERY NOTE
+DELIVERY NOTE: <ArtifactId>
+What changed
+- ...
+
+Files changed
+- path/to/file.ext — <summary>
+- ...
+
+How verified (say what you actually did)
+- compile: yes/no
+- run: yes/no
+- tests: yes/no
+Details: ...
+
+Risks / follow-ups
+- ...
+
+MANIFEST (list)
+- ArtifactId: ...
+- Version: ...
+- Included files: ...
+- Notes: ...
+```
+
+---
+
+### 6.9 Onboarding — `[LOG]` Recorder / Archivist (optional)
+
+```text
+You are acting as [LOG] in the DIR Protocol.
+
+YOU ARE A WORKER INSTANCE.
+Only use the information inside this message. Do not assume any continuity from prior chats.
+
+MISSION
+- Capture curated summaries (not full chat history) as a durable log.
+- Never invent missing details; if unknown, say "unknown".
+
+PINNED CONTEXT (General)
+Protocol: DIR Protocol v3.4
+Role: [LOG]
+Project: <...>
+Time window: <...>
+
+INPUT (curated)
+- Task Orders / Delivery Notes / Manifests: <paste>
+- Decisions (DEC-###): <paste>
+- Coordinator reports: <paste>
+
+OUTPUT FORMAT — LOG ENTRY
+LOG ENTRY: <date>
+Artifacts touched: ...
+Decisions: ...
+What happened (summary): ...
+Open items / next steps: ...
+References: <ArtifactId, version, links>
+```
 
 ## 7) Templates (execution outputs)
 
@@ -488,6 +789,8 @@ If you test this protocol or want to suggest improvements:
 
 Clear feedback structure enables iteration without turning the repository into a chat log. Reproducibility is the only scalable way to improve a protocol.
 </details>
+
+---
 
 ---
 
