@@ -1,440 +1,496 @@
-# Multi‑AI Collaborative Workflow (Email Team)
+# DIR Protocol: Multi‑AI Collaborative Workflow (Manual, Human‑Moderated)
 
-A system for orchestrating multiple AI models on complex intellectual tasks, designed as a **team of experts communicating 1‑on‑1 (like email)**.
-
-**Status:** Source of truth (single file)  
-**Version:** 2.5 (EN)  
+**Version:** 3.2  
 **Date:** January 2026  
-**Current models:** Claude Opus 4.5, Claude Sonnet 4.5, GPT‑5.2, Gemini Pro 3
+**Repository:** https://github.com/adil-fit-ba/Multi-AI-Collaborative-Workflow/
+
+---
+
+## Who this document is for
+
+This document is written for **humans**:
+- team members participating in a multi‑LLM workflow (moderators, organizers, developers, reviewers),
+- people who want to **apply** the protocol in practice,
+- people who want to **test** it or provide **feedback**.
+
+**LLM chats are not expected to read the rationale.** LLMs should be run using the **Onboarding Prompts** (Section 6), which are concise and instruction‑oriented.
+
+<details>
+<summary><strong>Why this separation (Humans vs LLMs)?</strong></summary>
+
+LLMs tend to over‑generalize and “role drift” when given long narrative context. Humans benefit from understanding *why* rules exist; LLMs benefit from short, unambiguous directives. This protocol therefore keeps rationale **available** but **optional** for execution.
+</details>
 
 ---
 
 ## 0) The gist (60 seconds)
 
-- **Roles matter more than models.** Models are replaceable; responsibility is not.
-- **Every chat is a new person.** Assume knowledge = 0 → Pinned Context is mandatory.
-- **The user (MOD) is the process moderator.** You cut the tempo, decide, and edit what enters the documentation.
-- **Dual review is REQUIRED even for small tasks.** (GPT + Opus, same prompt, same artifact)
-- **DEV receives tasks from a single channel only** (ORG, or MOD acting as ORG) → no parallel/conflicting instructions.
+- Treat each chat as a **new expert** (no assumed memory).
+- Run **Dual Independent Review (DIR)**: two reviewers, blind to each other.
+- Enforce **Evidence vs Hypothesis**: unverifiable claims must be labeled.
+- Keep every chat on track using **Pinned Context** (always).
+- Avoid parallel conflicting instructions using **hub‑and‑spoke task routing**.
+- Resolve disagreements with a **Conflict Packet**, not “do you agree?”.
+
+<details>
+<summary><strong>Rationale</strong></summary>
+
+These are the highest‑leverage guardrails observed in real multi‑chat work: preventing artifact confusion, minimizing conformity, and ensuring a single channel to the developer. The goal is reliability under context limits.
+</details>
 
 ---
 
-## 0.1 Why this way (Design Rationale)
+## 1) Core principles (non‑negotiable)
 
-These aren’t “rules for rules’ sake” — they prevent failure modes that repeatedly happen when multiple chats work in parallel.
+### 1.1 Dual Independent Review (DIR)
+Every delivered artifact must be reviewed by **two independent reviewers** who do **not** see each other’s review until both are finished.
 
-| Rule | Why |
-|---|---|
-| **Roles > models** | Models change; responsibilities must not. Otherwise you lose auditability and process control. |
-| **Every chat = a new person** | Prevents the “continuity illusion”; forces minimal context and reduces hallucinations. |
-| **Hub‑and‑spoke (DEV receives tasks from one channel only)** | The most effective way to avoid conflicting instructions and “patch‑on‑patch” chaos. |
-| **Dual review always (GPT + Opus)** | Different reasoning styles catch different bugs; cost is small, payoff is big. |
-| **Don’t show reviewers each other’s review before they finish** | Preserves independence; otherwise you get conformity instead of a second perspective. |
-| **Evidence > opinion (no evidence = Hypothesis)** | Prevents intuition and “product opinion” from being treated as fact. |
-| **Resolve conflict by test or cut, not ping‑pong** | Saves context and time; debate without new evidence is noise. |
-| **REV‑COORD = Opus 4.5 in Full mode** | A coordinator needs stability and factual consistency, not “far‑future implications”. |
-| **Pinned Context + GPT guardrail** | Direct antidote to artifact mix‑ups in long chats (especially during reviews). |
-| **Artifact naming + MANIFEST + Rollback** | Reproducibility + forensic trail: what shipped, when, how verified, and how to revert. |
-| **Light vs Full** | Minimizes overhead when risk is low; escalates only when truly needed (High/Block, public API, loss of overview). |
+<details>
+<summary><strong>Rationale</strong></summary>
 
----
+Independent perspectives catch different classes of issues. “Second reviewer after seeing the first” tends to converge via conformity rather than critique, reducing error detection.
+</details>
 
-## 0.2 Quick Start (Light mode in 5 steps)
+### 1.2 Evidence vs Hypothesis rule
+Any reviewer claim must be tagged as:
+- **Evidence**: verifiable (path/line, reproduction steps, logs, compile/test output), or
+- **Hypothesis**: plausible but unverified.
 
-For those who want to start immediately:
+<details>
+<summary><strong>Rationale</strong></summary>
 
-```
-1. Write a TASK ORDER → send to DEV
-2. DEV returns DELIVERY NOTE + artifact + MANIFEST
-3. Send the same artifact to REV-G and REV-C (same prompt)
-4. If they agree → fix backlog → DEV
-5. If they disagree → Conflict Packet → max 1 round → cut
-```
+This blocks “hallucination propagation”: an unverified statement becoming downstream “truth”. It also makes conflicts resolvable by tests rather than authority.
+</details>
 
-Details are in the sections below.
+### 1.3 Pinned Context discipline (every chat)
+Every new chat starts with a compact **Pinned Context** block. No exceptions.
 
----
+<details>
+<summary><strong>Rationale</strong></summary>
 
-## 1) Models (without roles)
+Without forced restatement of current state, models (and humans) drift, mix artifacts, and answer outdated questions—especially when threads are long or repeated.
+</details>
 
-| Model | Strengths | Weaknesses / risks |
-|---|---|---|
-| **GPT‑5.2** | Best for structuring, deduping, prioritizing, systematic review, methodology, task breakdown | Can drift into too much process; weaker as a pure implementer; needs explicit “don’t code” |
-| **Claude Opus 4.5** | Deep argumentation, debate, alternatives, synthesis; good product sense | Context limit → needs Pinned Context; sometimes less checklist‑systematic |
-| **Claude Sonnet 4.5** | Best “workhorse” for implementation and delivery; stable execution of instructions | If the brief is vague, it fills gaps with assumptions → requires Task Order + acceptance criteria |
-| **Gemini Pro 3** | Huge context; excellent as archivist/minutes‑taker and long‑history synthesis | Can be generic → needs templates and curated input, not “all messages” |
+### 1.4 Hub‑and‑spoke task routing
+The developer receives tasks from **one source only** (ORG; in Light mode MOD may temporarily act as ORG).
+
+<details>
+<summary><strong>Rationale</strong></summary>
+
+Parallel tasking from multiple reviewers creates contradictory instructions and destroys traceability. A single routing point enables deduplication, prioritization, and consistent versioning.
+</details>
 
 ---
 
-## 2) Work roles → recommended model
+## 2) Modes: Light vs Full
 
-| Role | Tag | Recommended model | Comment / guardrail |
-|---|---|---|---|
-| Moderator | **[MOD]** | You | Cuts, priorities, decisions, final merge into documentation. |
-| Organizer / Dispatcher (hub) | **[ORG]** | **GPT‑5.2** | Receives inputs, dedupes, produces **Task Orders**. Does not go deep into code. **Does not code.** |
-| Thinker (strategy/methodology) | **[TH]** | GPT‑5.2 + Opus 4.5 (parallel) | Same brief goes to both (different reasoning style). **They do not code.** |
-| Reviewer A | **[REV‑G]** | **GPT‑5.2** | Independent review. Output = **REVIEW MEMO** (not tasks). |
-| Reviewer B | **[REV‑C]** | **Opus 4.5** | Independent review; often catches different failures. Output = REVIEW MEMO. |
-| Implementer | **[DEV]** | **Sonnet 4.5** (Opus 4.5 for heavy refactors) | Works only from Task Orders. Allowed 1–3 short questions when assumptions block. |
-| Recorder / Archivist (optional) | **[LOG]** | **Gemini Pro 3** | Receives curated LOG ENTRY + MANIFEST summaries. |
-| Conflict coordinator (optional) | **[REV‑COORD]** | **Opus 4.5** (Full) / MOD (Light) | **Progress moderator**: demands evidence, cuts ping‑pong, returns a Coord Report. In Light mode MOD does this (no separate chat). |
+### 2.1 Light Mode (default)
+Use for small/medium tasks. Roles:
+- **MOD** (human) — controls the process, makes the final cut.
+- **DEV** — implements.
+- **REV‑A** and **REV‑B** — independent reviewers.
 
-**Instance rule:** one role = one chat. If you need parallelism: `[REV‑G2]`, `[DEV‑2]`… (each is a separate chat).
+**Light Mode rule:** DIR is still mandatory.
 
-**Note on TH:** Use TH only when you need strategic/methodological discussion before implementation (e.g., architecture, major trade‑offs). For pure bugfixes and small features, skip TH.
+<details>
+<summary><strong>Rationale</strong></summary>
 
----
+Even “small” changes can ship subtle breakage. Light mode removes administrative overhead while keeping the one mechanism that most reliably prevents misses: dual independent review.
+</details>
 
-## 3) Two operating modes
+### 2.2 Full Mode (escalation)
+Use for complex tasks, repeated conflict, or high risk. Adds:
+- **ORG** — project versioning + task routing + acceptance gate to DEV.
+- **COORD** — coordinator who synthesizes disagreements and recommends a MOD decision.
+- Optional: **TH‑A / TH‑B** — ideation specialists for architecture/research questions.
 
-### 3.1 Light (default for small tasks)
+<details>
+<summary><strong>Rationale</strong></summary>
 
-Minimal, but reliable:
-- **MOD** (you) + **DEV** + **REV‑G & REV‑C**
-- **ORG** is optional (if absent, MOD “acts as ORG” and remains the **single source of tasks**)
-- **Dual review is required**
-- **No separate conflict‑coordinator chat**: MOD cuts (max 1 conflict round in Light)
+Full mode exists to manage *coordination load*: deduplication, conflict resolution, and auditability when multiple moving parts exceed what the moderator can comfortably juggle ad‑hoc.
+</details>
 
-*Why Light: minimal friction, while keeping the two highest‑leverage protections (single task channel + dual review).* 
+### 2.3 Escalation triggers (Light → Full)
+Escalate if any of these hold:
+- REV labels issue **High** or recommends **Block**,
+- conflict not resolved after **one** structured conflict round,
+- change touches public API / database schema / deployment pipeline,
+- MOD feels loss of overview or repeated context confusion.
 
-### 3.2 Full (when it escalates)
+<details>
+<summary><strong>Rationale</strong></summary>
 
-**Escalate Light → Full (checklist):**
-- [ ] A reviewer returns **High** or **Block**
-- [ ] The conflict is not resolved in **1 round** (Light limit)
-- [ ] The change touches **>3 files** or a **public API**
-- [ ] You (MOD) feel you’re losing overview / risk is growing
-
-In Full mode you add ORG (if not already) and, when needed, `[REV‑COORD]` as a separate chat (default: **Opus 4.5 as progress moderator**).
-
-*Why Full: increased overhead only when risk is real (High/Block, multiple modules, public API, or a conflict that needs proof/tests).* 
+Escalation is a safety valve. You only pay coordination overhead when risk is high or discussion becomes non‑productive.
+</details>
 
 ---
 
-## 4) Communication topology (email‑only, no meetings)
+## 3) Roles and responsibilities (what each role does)
 
-**Golden rule:** DEV never receives parallel instructions from multiple chats.
+### MOD (Moderator — human)
+- Owns process, decides when to continue vs cut.
+- Assigns DEC IDs and records final decisions.
+- Approves what becomes “source of truth” in documentation.
 
-```
-REV/TH → ORG (or MOD)     inputs go into the hub
-ORG/MOD → DEV              tasks from a single channel only
-DEV → ORG/MOD              Delivery Note + artifact + MANIFEST
-ORG/MOD → REV‑G and REV‑C  same artifact, same review brief
-ORG/MOD → REV‑COORD        only for hard conflicts (Full mode)
-```
+**MOD is the only final decision‑maker.**
+
+<details>
+<summary><strong>Rationale</strong></summary>
+
+A single accountable decision point prevents “committee paralysis” and keeps the workflow moving even when evidence is incomplete.
+</details>
+
+### ORG (Organizer)
+- Maintains project versioning and artifact IDs.
+- Converts reviews/conflicts into **task orders** for DEV.
+- Ensures DEV receives a single, consistent instruction stream.
+- Verifies deliverables include required packaging (MANIFEST, DELIVERY NOTE).
+
+<details>
+<summary><strong>Rationale</strong></summary>
+
+ORG is the “routing + bookkeeping brain” so reviewers can focus on analysis and DEV can focus on implementation. It reduces cognitive load on MOD for sustained work.
+</details>
+
+### DEV (Developer / Implementer)
+- Implements the **Task Order** exactly.
+- Delivers artifact with **MANIFEST.md** + **DELIVERY NOTE**.
+- Does not engage in strategy debate inside the DEV chat.
+
+<details>
+<summary><strong>Rationale</strong></summary>
+
+Separating implementation from strategy prevents churn and keeps artifact‑bounded work efficient.
+</details>
+
+### REV‑A / REV‑B (Reviewers)
+- Review the same artifact independently using the same brief.
+- Produce a **REVIEW MEMO** with severity + recommendation.
+- If disagreement exists, respond via **Conflict Packet** (no “agree?” prompts).
+
+<details>
+<summary><strong>Rationale</strong></summary>
+
+Two reviewers with different reasoning styles catch complementary issues. The structured memo prevents reviews from becoming vague opinions.
+</details>
+
+### COORD (Coordinator) — one role, two modes
+COORD does **not** implement and does **not** task DEV directly.
+COORD’s job is to reduce ambiguity and help MOD decide.
+
+**COORD‑IDEA (Idea mode):**  
+- merges competing ideas into 2–3 options,
+- lists assumptions and trade‑offs,
+- recommends an option to MOD.
+
+**COORD‑DISPUTE (Dispute mode):**  
+- resolves contradictions (what is correct *for this artifact*),
+- demands evidence or proposes a test/spike,
+- produces a recommendation to MOD (accept A/B, run test, MOD cut).
+
+<details>
+<summary><strong>Rationale</strong></summary>
+
+Using one coordinator with two modes avoids role explosion (REV‑COORD vs THINK‑COORD) while preserving the same disciplined mechanism: structured convergence + MOD decision.
+</details>
+
+### TH‑A / TH‑B (Thinkers — optional)
+Use when you need architecture/research exploration before implementation.
+- Propose approaches, risks, long‑term implications.
+- Do **not** write production code in thinker chats.
+
+<details>
+<summary><strong>Rationale</strong></summary>
+
+Thinker chats are useful for high‑level exploration, but they easily drift into pseudo‑implementation. Keeping them non‑coding protects clarity and handoff quality.
+</details>
 
 ---
 
-## 5) Non‑negotiable rules
+## 4) Artifacts, versioning, and deliverables
 
-1. **Every chat is a new person.** Put Pinned Context at the top.
-2. **Dual review (DIR) is mandatory** even for small tasks.
-3. **Do not show reviewers each other’s reviews before both finish.**
-4. **If there’s no evidence → the status is Hypothesis.**
-5. **Do not ask “do you agree?”** When there is conflict, request evidence and a falsification test.
+### 4.1 Artifact naming (example)
+Use a unique artifact ID and version:
+- `project_v29.4.3.zip`
+- `project_v29.4.4_patch1.zip`
 
-### 5.1 Exception: verification without conformity
+ORG owns versioning.
 
-If you suspect GPT mixed artifacts, you may send a **curated list of items** (not the full review) and ask for labels:
-- **VALID** — confirmed
-- **INVALID** — incorrect
-- **UNCERTAIN** — needs verification
+<details>
+<summary><strong>Rationale</strong></summary>
 
-For each label, ask for evidence/test where possible. This is not “seeking agreement” — it’s fact verification.
+Unique names prevent “final_FINAL.zip” chaos and make reviews traceable.
+</details>
 
-### 5.2 GPT guardrail (file mix‑ups / long context)
+### 4.2 Required packaging for any delivered artifact
+DEV delivers:
+1) the artifact (zip/repo link/etc.)
+2) **MANIFEST.md** (what’s inside, key diffs, versions)
+3) **DELIVERY NOTE** (how to verify, what changed, constraints respected)
 
-When you notice GPT mixing artifacts or adding facts not present in the current input:
+<details>
+<summary><strong>Rationale</strong></summary>
 
-- **Don’t feed the full history.**
-- Send only: **Artifact ID + Pinned Context (5 bullets) + your question**.
-- Insist explicitly: **“Answer only for this artifact.”**
+Without standardized packaging, reviewers waste time reconstructing context, and mistakes slip through (wrong branch, wrong file set, missing migrations, etc.).
+</details>
 
----
+### 4.3 Rollback (when a delivery is rejected)
+- Never delete history. Mark artifact as **Rejected**.
+- ORG issues a new task order: “revert to X” or “fix Y”.
+- DEV delivers a new version (`+patch`).
 
-## 6) Standard workflow (Light)
+<details>
+<summary><strong>Rationale</strong></summary>
 
-```
-1) MOD/ORG → DEV:        Task Order (scope + acceptance + constraints)
-2) DEV → MOD/ORG:        Delivery Note + artifact + MANIFEST
-3) MOD/ORG → REV‑G/C:    same review task, same artifact
-4) If they agree:         fix backlog → DEV
-5) If they disagree:      Conflict Packet → max 1 round → cut or spike/test
-```
-
-**Progress** exists only if something new appears: evidence, a minimal test, narrowed dispute, or a changed stance.
-
----
-
-## 6.5 Rollback / Abort (when a delivery is not acceptable)
-
-**Triggers:**
-- A reviewer returns **Block** with a STOP‑SHIP issue
-- DEV reports the delivery is fundamentally wrong
-- MOD discovers a critical problem after merge
-
-**Procedure:**
-
-1. MOD marks the artifact as **rejected** (do not delete — keep audit trail)
-2. MOD/ORG creates a new **Task Order** with clear: `revert to <X>` or `fix <Y>`
-3. DEV delivers a **patch** (vMAJOR.MINOR.PATCH+1) with explanation in DELIVERY NOTE + MANIFEST
-
-*Why: artifacts aren’t deleted to preserve audit trail; patch versions provide reproducibility and a clear attempt history.*
+Rejecting without losing traceability enables audit trails and reduces repeated debate about “what happened”.
+</details>
 
 ---
 
-## 7) Reviewer conflicts (Light: MOD cuts)
+## 5) Conflict handling (anti‑ping‑pong)
 
-### 7.1 Conflict Packet (copy/paste)
+### 5.1 What NOT to do
+Do not ask a reviewer: **“Do you agree with reviewer X?”**
 
+Instead: create a **Conflict Packet** that asks for:
+- what claim is wrong and why,
+- what evidence would decide it,
+- what minimal test/spike can settle it.
+
+<details>
+<summary><strong>Rationale</strong></summary>
+
+Agreement prompts trigger conformity. Conflict Packets trigger falsifiable reasoning and concrete next steps.
+</details>
+
+### 5.2 Conflict workflow
+1) REV‑A and REV‑B complete blind reviews.
+2) If disagreement: MOD/ORG writes Conflict Packet.
+3) Each reviewer responds once with evidence/test suggestions.
+4) COORD‑DISPUTE may synthesize if needed.
+5) MOD makes final cut; ORG turns it into a task order if changes are required.
+
+<details>
+<summary><strong>Rationale</strong></summary>
+
+A bounded round count prevents endless ping‑pong while still extracting the key information needed for a decision.
+</details>
+
+---
+
+## 6) Onboarding prompts (copy/paste)
+
+> **Rule:** LLM chats should follow the onboarding prompt and **ignore rationale**.  
+> Only the short “Execution” parts matter for LLM operation.
+
+### 6.1 PINNED CONTEXT (General)
 ```text
-I have a conflict between two reviews. I need your reply in 5–10 lines:
-
-A-claim (other reviewer): <1 sentence>
-B-claim (yours): <1 sentence>
-
-1) Which claim is more correct and WHY?
-2) Evidence (path:line / repro / log). If you have no evidence, label it "hypothesis".
-3) One minimal test that would falsify the wrong claim.
-4) Confidence 0–100%.
+PINNED CONTEXT (General)
+Protocol: DIR Protocol v3.2
+Role: [MOD / ORG / DEV / REV-A / REV-B / COORD / TH-A / TH-B]
+Artifact: [artifact-id]
+Goal: [1 sentence]
+Out of scope: [2–3 bullets]
+Decisions already made: [up to 2 bullets or DEC-IDs]
+Open questions: [max 3]
+Constraints: [max 5]
 ```
 
-### 7.2 Conflict rules
+### 6.2 PINNED CONTEXT (Review)
+```text
+PINNED CONTEXT (Review)
+Artifact: [artifact-id]
+Review goal: [1 sentence]
+Out of scope: [2–3 bullets]
+Already decided: [DEC-IDs or 2 bullets]
+Open items: [max 3]
+IMPORTANT: Answer only about this artifact.
+```
 
-- If both provide **evidence** and still disagree → **mini spike/test** is the default
-- If the dispute is a “judgement call” (UX, trade‑off) → MOD cuts and moves on
-- If the debate repeats without progress → **cut immediately** (don’t waste context)
+### 6.3 Onboarding — DEV
+```text
+You are DEV (Implementer). You only implement the Task Order below.
+Do not debate strategy. Do not change scope.
+Output: DELIVERY NOTE + MANIFEST.md summary.
 
-### 7.3 When to enable a separate `[REV‑COORD]`
+[PINNED CONTEXT (General)]
 
-Only in Full mode, when it’s High/Block or the dispute is hard and persists.
+TASK ORDER:
+[paste]
+```
+
+### 6.4 Onboarding — Reviewer (REV-A / REV-B)
+```text
+You are an independent reviewer. You must not assume continuity from other chats.
+You must label claims as Evidence vs Hypothesis.
+You must not seek agreement—focus on falsifiable critique.
+Output format: REVIEW MEMO.
+
+[PINNED CONTEXT (Review)]
+
+ARTIFACT / DIFF / CONTEXT:
+[paste]
+```
+
+### 6.5 Onboarding — COORD (Idea mode)
+```text
+You are COORD in IDEA mode. Your job is to synthesize competing proposals into options.
+Do not implement. Do not task DEV.
+Output: 2–3 options + trade-offs + recommended option to MOD.
+
+[PINNED CONTEXT (General)]
+
+INPUTS (proposal A, proposal B, constraints):
+[paste]
+```
+
+### 6.6 Onboarding — COORD (Dispute mode)
+```text
+You are COORD in DISPUTE mode. Your job is to resolve contradictions about correctness.
+Demand Evidence; if missing, propose the smallest test/spike.
+Do not implement. Do not task DEV.
+Output: Recommendation to MOD (accept A/B, run test, MOD cut) + rationale.
+
+[PINNED CONTEXT (General)]
+
+CONFLICT PACKET:
+[paste]
+```
+
+### 6.7 Onboarding — ORG
+```text
+You are ORG. You own versioning and task routing.
+You convert reviews/decisions into a single Task Order for DEV.
+You ensure deliverables include MANIFEST + DELIVERY NOTE.
+
+[PINNED CONTEXT (General)]
+
+INPUTS:
+[reviews, decisions, constraints]
+```
 
 ---
 
-## 8) Pinned Context
+## 7) Templates (execution outputs)
 
-### 8.1 PINNED CONTEXT (general)
-
-For TH, DEV, ORG and new chats:
-
+### 7.1 REVIEW MEMO (REV)
 ```text
-CURRENT STATE:
-• Topic:
-• Goal of this session:
-• Last decision (if any):
-• Open questions (max 3):
-• Constraints (e.g., no migrations, no breaking API):
-• Input reference (link/commit/artifact):
-```
-
-### 8.2 PINNED CONTEXT (review)
-
-Short version for REV‑G/REV‑C (especially when GPT is confused):
-
-```text
-• Artifact: <name_version.zip>
-• Review goal: <1 sentence>
-• Out of scope: <2–3 items>
-• Already decided: <DEC-### or 2 bullets>
-• Open items: <max 3>
-```
-
----
-
-## 9) Templates (copy/paste)
-
-### 9.1 REVIEW MEMO (for REV‑G and REV‑C)
-
-```text
-[REV] REVIEW MEMO
-Target: <artifact / branch / commit>
-
-Risk class: Low | Medium | High
-Recommendation: Merge | Merge with fixes | Block
+REVIEW MEMO
+Artifact: [id]
+Severity: Low / Medium / High
+Recommendation: Merge / Merge with fixes / Block
 
 Findings:
-- ISSUE-001 | Severity: Block/High/Med/Low | Claim | Evidence | Proposed fix
-
-Risk notes:
+- [Evidence|Hypothesis] ...
 - ...
 
-Quick wins (max 5):
+Stop-ship issues (if any):
 - ...
 
-Questions (max 3):
+Suggested tests / verification:
 - ...
 
-Verified by: compile / run / tests (yes/no)
+Verified by: compile (yes/no), run (yes/no), tests (yes/no)
 How verified: ...
 ```
 
-*Note: “Verified by” is at the end because you read findings first, then check how it was verified.*
-
-### 9.2 TASK ORDER (MOD/ORG → DEV)
-
+### 7.2 CONFLICT PACKET (MOD/ORG)
 ```text
-[ORG] TASK ORDER
-Goal: <1 sentence>
+CONFLICT PACKET
+Artifact: [id]
+Question to resolve: [1 sentence]
 
-Tasks:
-- TASK-001: ...
-  Acceptance:
-  - [ ] ...
-  Constraints:
-  - ...
-
-Out of scope:
+Claim A (from REV-A):
 - ...
 
-Test/Verification:
+Claim B (from REV-B):
+- ...
+
+What evidence would decide this?
+- ...
+
+Smallest test/spike to settle it:
+- ...
+
+Constraints:
 - ...
 ```
 
-### 9.3 DELIVERY NOTE (DEV → MOD/ORG)
-
-> **Rule:** DEV always delivers **artifact + MANIFEST.md + DELIVERY NOTE** together.
-
+### 7.3 TASK ORDER (ORG → DEV)
 ```text
-[DEV] DELIVERY NOTE
-Artifact: <name + version>
+TASK ORDER
+Artifact target: [new artifact id/version]
 
-Completed:
-- TASK-001
-
-Blocked/Not done:
+Goal:
 - ...
 
-Assumptions:
+Scope (do):
+- ...
+
+Out of scope (do not touch):
+- ...
+
+Acceptance criteria:
+- [ ]
+- [ ]
+
+Constraints:
+- ...
+
+Verification steps:
+- ...
+```
+
+### 7.4 DELIVERY NOTE (DEV)
+```text
+DELIVERY NOTE
+Artifact: [id]
+Summary of changes:
+- ...
+
+Files/modules touched:
 - ...
 
 How to verify:
-1) ...
-2) ...
-```
-
----
-
-## 10) LOG ENTRY (if you use Gemini)
-
-Gemini records only **curated** entries (not every message):
-
-```text
-[LOG ENTRY]
-Timestamp: YYYY-MM-DD HH:MM
-Actor: [ORG] | [TH] | [REV-G] | [REV-C] | [DEV] | [MOD]
-Topic: <short>
-Type: Idea | Decision | OpenQuestion | Delivery | Review | Conflict | Patch
-Ref: DEC-### / ISSUE-### / TASK-### (if any)
-
-Content:
 - ...
 
-Next:
+Known limitations / assumptions:
+- ...
+```
+
+### 7.5 MANIFEST.md (DEV)
+```text
+MANIFEST
+Artifact: [id]
+Contents:
+- ...
+
+Key diffs:
+- ...
+
+Dependencies / versions:
+- ...
+
+Build/run notes:
 - ...
 ```
 
 ---
 
-## 11) Artifact naming + MANIFEST (mandatory for deliveries)
+## 8) Feedback and contribution
 
-> **Rule:** MANIFEST.md is written by **DEV** for every delivery (Gemini/LOG stores only the textual summary, not the binary).
+If you test this protocol or want to suggest improvements:
+- open an issue with: **context + what failed + what you changed + why**
+- include the smallest reproducible example (artifact id + pinned context)
 
-### 11.1 Filename format
+<details>
+<summary><strong>Rationale</strong></summary>
 
-```text
-<Project>_vMAJOR.MINOR.PATCH_YYYYMMDD-HHMM_<ActorTag>.zip
-```
-
-Example: `MultiCriteriaAgent_v29.4.3_20260117-1042_DEV.zip`
-
-### 11.2 MANIFEST.md (in the zip root)
-
-```markdown
-# MANIFEST
-
-**Project:** <name>
-**Version:** v#.#.#
-**Date:** YYYY-MM-DD HH:MM
-**Actor:** [DEV]
-
-## Changelog (5–10 bullets)
-- 
-
-## Files changed
-- `path/to/file.ext` — short note
-
-## How to run / verify
-1.
-2.
-
-## Known limitations
-- 
-
-## Related tasks/issues
-- TASK-###
-- ISSUE-###
-```
-
----
-
-## 12) Minimal documentation discipline
-
-- Tags are mandatory only for things you copy into LOG or into this document
-- Decisions and cuts should be short (3–7 bullets) and include “what” + “why”
-- If something is later superseded, write “superseded” and keep the trace (don’t delete history)
-
-**Numbering:**
-- **ISSUE-###** is created by a reviewer (in REVIEW MEMO)
-- **TASK-###** is created by ORG/MOD (in TASK ORDER)
-- **DEC-###** is created by MOD (for decisions/cuts)
-- Relationships are recorded in MANIFEST (“Related tasks/issues”)
-
----
-
-## 13) Cheat Sheet
-
-### Tags
-
-```
-[MOD]        Moderator (you)
-[ORG]        Organizer/Dispatcher
-[TH]         Thinker (strategy)
-[REV-G]      Reviewer A (GPT)
-[REV-C]      Reviewer B (Claude)
-[DEV]        Implementer
-[LOG]        Recorder (Gemini)
-[REV-COORD]  Conflict coordinator (Full)
-```
-
-### Workflow (Light)
-
-```
-TASK ORDER → DEV → DELIVERY + MANIFEST → REV-G + REV-C → fix/merge or Conflict Packet
-```
-
-### Review Risk/Recommendation
-
-```
-Risk:           Low | Medium | High
-Recommendation: Merge | Merge with fixes | Block
-```
-
-### Escalation Light → Full
-
-```
-[ ] High/Block finding
-[ ] Conflict not resolved in 1 round
-[ ] >3 files or public API
-[ ] You’re losing overview
-```
+Clear feedback structure enables iteration without turning the repository into a chat log. Reproducibility is the only scalable way to improve a protocol.
+</details>
 
 ---
 
 ## Changelog
 
-| Version | Date | Changes |
-|---|---|---|
-| 2.5 | Jan 2026 | Quick Start, Cheat Sheet, ISSUE/TASK/DEC numbering, Rollback trigger, PINNED CONTEXT split (general/review), “Verified by” moved to end of REVIEW MEMO |
-| 2.4 | Jan 2026 | Design Rationale (0.1), Rollback procedure, escalation checklist |
-| 2.1 | Jan 2026 | Light/Full modes, Conflict Packet |
-| 2.0 | Jan 2026 | Hub‑and‑spoke, Dual Independent Review (DIR) |
+- **3.2 (Jan 2026):** Introduced **COORD** as a single role with two modes (IDEA/DISPUTE); clarified ORG versioning responsibilities; strengthened “humans vs LLMs” separation via rationale blocks; kept execution prompts concise for LLMs.
