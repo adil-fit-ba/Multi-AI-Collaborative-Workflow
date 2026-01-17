@@ -1,404 +1,440 @@
-# Multi-AI Collaborative Workflow
+# Multi‑AI Collaborative Workflow (Email Team)
 
-A system for orchestrating multiple AI models in complex intellectual tasks.
+A system for orchestrating multiple AI models on complex intellectual tasks, designed as a **team of experts communicating 1‑on‑1 (like email)**.
 
----
-
-## Philosophy
-
-Each AI model has its strengths. Instead of relying on a single model, we use them as a **team of specialists** where each contributes what they do best.
-
-**The user is the moderator of the process:**
-- Decides when discussion moves forward, when to cut, and which messages/quotes enter the "Source of Truth"
-- Copy/paste is curated — the moderator can shorten, reformulate, or merge messages before entering them into the document
-- AI suggests structure and guardrails, but the moderator decides tempo, cuts, and final content
-
-*This workflow is an assistive framework, not a rigid procedure.*
+**Status:** Source of truth (single file)  
+**Version:** 2.5 (EN)  
+**Date:** January 2026  
+**Current models:** Claude Opus 4.5, Claude Sonnet 4.5, GPT‑5.2, Gemini Pro 3
 
 ---
 
-## Model Roles
+## 0) The gist (60 seconds)
 
-| Model | Instance | Primary Role | Strengths | Weaknesses |
-|-------|----------|--------------|-----------|------------|
-| **Claude Opus ET** | Chat 1 | Strategist, debater | Deep analysis, discussion with GPT | Context limit |
-| **Claude Opus/Sonnet** | Chat 2 | Implementer | Coding, writing, execution | Don't mix with discussion |
-| **Claude Opus** | Chat 3 (optional) | Synthesis | Summarizing, conclusions | Alternative to Gemini |
-| **GPT ET** | - | Strategist, critic | Deep analysis, review, methodology | Weaker at coding |
-| **Gemini Pro** | - | Archivist, synthesis | Huge context (1M tokens) | More generic responses |
-
-### ⚠️ Important Rule
-
-**Claude instances DO NOT mix roles within the same chat:**
-- Chat for discussion → ONLY discussion, no coding
-- Chat for coding → ONLY coding, no strategic debates
-- Chat for synthesis → ONLY summarizing and conclusions
-
-### 📝 Note on Synthesis
-
-Synthesis is an **optional phase**. It can be done by:
-- Gemini Pro (if you need huge context)
-- Claude Opus in a separate chat (if you don't use Gemini)
-- Manually (you summarize into this document)
-
-**Trigger for synthesis (recommendation):**
-- Discussion exceeds ~10+ messages
-- There are 2+ disagreements between models
-- Switching to a new topic
-- Returning after a break (day+)
+- **Roles matter more than models.** Models are replaceable; responsibility is not.
+- **Every chat is a new person.** Assume knowledge = 0 → Pinned Context is mandatory.
+- **The user (MOD) is the process moderator.** You cut the tempo, decide, and edit what enters the documentation.
+- **Dual review is REQUIRED even for small tasks.** (GPT + Opus, same prompt, same artifact)
+- **DEV receives tasks from a single channel only** (ORG, or MOD acting as ORG) → no parallel/conflicting instructions.
 
 ---
 
-## Task Types
+## 0.1 Why this way (Design Rationale)
 
-### Software Development
-- Architectural decisions
-- Code review and refactoring
-- API and database design
-- Debugging complex problems
+These aren’t “rules for rules’ sake” — they prevent failure modes that repeatedly happen when multiple chats work in parallel.
 
-### Research
-- Literature review
-- Source synthesis
-- Hypothesis development
-- Methodological decisions
-
-### Academic Work
-- Dissertation/paper structure
-- Argumentation
-- Critical analysis
-- Writing and revision
-
-### Strategic Decisions
-- Option evaluation
-- Risk analysis
-- Trade-off discussions
-- Long-term planning
+| Rule | Why |
+|---|---|
+| **Roles > models** | Models change; responsibilities must not. Otherwise you lose auditability and process control. |
+| **Every chat = a new person** | Prevents the “continuity illusion”; forces minimal context and reduces hallucinations. |
+| **Hub‑and‑spoke (DEV receives tasks from one channel only)** | The most effective way to avoid conflicting instructions and “patch‑on‑patch” chaos. |
+| **Dual review always (GPT + Opus)** | Different reasoning styles catch different bugs; cost is small, payoff is big. |
+| **Don’t show reviewers each other’s review before they finish** | Preserves independence; otherwise you get conformity instead of a second perspective. |
+| **Evidence > opinion (no evidence = Hypothesis)** | Prevents intuition and “product opinion” from being treated as fact. |
+| **Resolve conflict by test or cut, not ping‑pong** | Saves context and time; debate without new evidence is noise. |
+| **REV‑COORD = Opus 4.5 in Full mode** | A coordinator needs stability and factual consistency, not “far‑future implications”. |
+| **Pinned Context + GPT guardrail** | Direct antidote to artifact mix‑ups in long chats (especially during reviews). |
+| **Artifact naming + MANIFEST + Rollback** | Reproducibility + forensic trail: what shipped, when, how verified, and how to revert. |
+| **Light vs Full** | Minimizes overhead when risk is low; escalates only when truly needed (High/Block, public API, loss of overview). |
 
 ---
 
-## Workflow
+## 0.2 Quick Start (Light mode in 5 steps)
+
+For those who want to start immediately:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│          SYNTHESIS (Optional)                           │
-│     Gemini Pro OR Claude Opus (separate chat)           │
-│         Holds full context, synthesizes, remembers     │
-└─────────────────────────────────────────────────────────┘
-                            ↑
-                            │ (when discussion ends)
-                            │
-        ┌───────────────────┴───────────────────┐
-        │                                       │
-        │   ╔═══════════════════════════════╗   │
-        │   ║     DISCUSSION (n iterations) ║   │
-        │   ╠═══════════════════════════════╣   │
-        │   ║                               ║   │
-        │   ║  ┌─────────┐     ┌─────────┐  ║   │
-        │   ║  │ GPT ET  │ ←─→ │ Claude  │  ║   │
-        │   ║  │(Strateg)│     │ Opus ET │  ║   │
-        │   ║  └─────────┘     │ CHAT 1  │  ║   │
-        │   ║                  └─────────┘  ║   │
-        │   ║       ↻ repeat until          ║   │
-        │   ║         moderator cuts        ║   │
-        │   ║                               ║   │
-        │   ║  Both DO NOT code!            ║   │
-        │   ╚═══════════════════════════════╝   │
-        │                                       │
-        └───────────────────────────────────────┘
-                            │
-                 conclusions ↓
-                            │
-                ┌───────────────────┐
-                │  Claude Opus      │
-                │  (Implementer)    │
-                │     CHAT 2        │
-                │                   │
-                │  ONLY codes!      │
-                └───────────────────┘
-                            │
-                            ↓
-                  ┌───────────────────┐
-                  │  THIS DOCUMENT   │
-                  │ (Source of Truth)│
-                  └───────────────────┘
+1. Write a TASK ORDER → send to DEV
+2. DEV returns DELIVERY NOTE + artifact + MANIFEST
+3. Send the same artifact to REV-G and REV-C (same prompt)
+4. If they agree → fix backlog → DEV
+5. If they disagree → Conflict Packet → max 1 round → cut
 ```
 
-### Instances and Their Roles
-
-```
-CHAT 1: Claude Opus ET     →  Discussion with GPT ET (no code!) — can be n iterations
-CHAT 2: Claude Opus/Sonnet →  Implementation (no discussion!)
-CHAT 3: Claude Opus        →  Synthesis (optional, alternative to Gemini)
-```
-
-**Chat 2 rule:**
-- ONLY implementation — exception: 1–3 short questions allowed if assumptions are blocking
-- If no answer → implementer chooses the safest option and clearly states assumptions in output
-
-### Phases
-
-1. **Definition** — Clearly articulate the problem/question
-2. **Exploration** — GPT ET explores options, approaches, methodologies
-3. **Debate** — Claude ET (Chat 1) and GPT ET exchange perspectives
-4. **Synthesis** — *(Optional)* Gemini OR Claude (Chat 3) summarizes conclusions
-5. **Implementation** — Claude (Chat 2) executes what was agreed — ONLY code/writing
-6. **Review** — GPT ET reviews the result
-7. **Iteration** — Repeat as needed
-8. **Documentation** — Conclusions go into this file
+Details are in the sections below.
 
 ---
 
-## Working Rules
+## 1) Models (without roles)
 
-### Moderator Control
+| Model | Strengths | Weaknesses / risks |
+|---|---|---|
+| **GPT‑5.2** | Best for structuring, deduping, prioritizing, systematic review, methodology, task breakdown | Can drift into too much process; weaker as a pure implementer; needs explicit “don’t code” |
+| **Claude Opus 4.5** | Deep argumentation, debate, alternatives, synthesis; good product sense | Context limit → needs Pinned Context; sometimes less checklist‑systematic |
+| **Claude Sonnet 4.5** | Best “workhorse” for implementation and delivery; stable execution of instructions | If the brief is vague, it fills gaps with assumptions → requires Task Order + acceptance criteria |
+| **Gemini Pro 3** | Huge context; excellent as archivist/minutes‑taker and long‑history synthesis | Can be generic → needs templates and curated input, not “all messages” |
 
-**Discussion duration:** Discussion continues as long as the moderator judges the value of additional iteration exceeds the cost.
+---
 
-**Signals for cutting (guidelines, not mandatory):**
-- Arguments start repeating
-- Only 1–2 unknowns remain
-- Decision is reversible — better to test than debate
-- Already enough information for the next step
+## 2) Work roles → recommended model
 
-### Cut (Moderator Cut)
+| Role | Tag | Recommended model | Comment / guardrail |
+|---|---|---|---|
+| Moderator | **[MOD]** | You | Cuts, priorities, decisions, final merge into documentation. |
+| Organizer / Dispatcher (hub) | **[ORG]** | **GPT‑5.2** | Receives inputs, dedupes, produces **Task Orders**. Does not go deep into code. **Does not code.** |
+| Thinker (strategy/methodology) | **[TH]** | GPT‑5.2 + Opus 4.5 (parallel) | Same brief goes to both (different reasoning style). **They do not code.** |
+| Reviewer A | **[REV‑G]** | **GPT‑5.2** | Independent review. Output = **REVIEW MEMO** (not tasks). |
+| Reviewer B | **[REV‑C]** | **Opus 4.5** | Independent review; often catches different failures. Output = REVIEW MEMO. |
+| Implementer | **[DEV]** | **Sonnet 4.5** (Opus 4.5 for heavy refactors) | Works only from Task Orders. Allowed 1–3 short questions when assumptions block. |
+| Recorder / Archivist (optional) | **[LOG]** | **Gemini Pro 3** | Receives curated LOG ENTRY + MANIFEST summaries. |
+| Conflict coordinator (optional) | **[REV‑COORD]** | **Opus 4.5** (Full) / MOD (Light) | **Progress moderator**: demands evidence, cuts ping‑pong, returns a Coord Report. In Light mode MOD does this (no separate chat). |
 
-Standard action when moderator decides to end discussion:
+**Instance rule:** one role = one chat. If you need parallelism: `[REV‑G2]`, `[DEV‑2]`… (each is a separate chat).
 
-1. Summarize current agreement in 3–7 bullets
-2. List open points (max 3)
-3. Define next step: test/spike/mini-experiment or implementation
-4. Send to implementer (Claude Chat 2)
+**Note on TH:** Use TH only when you need strategic/methodological discussion before implementation (e.g., architecture, major trade‑offs). For pure bugfixes and small features, skip TH.
 
-### Context Management
-- [ ] Each session starts with a summary of previous state
-- [ ] Conclusions are IMMEDIATELY recorded in this document
-- [ ] Gemini holds full history for reference (if used)
-- [ ] When a model "forgets", consult Gemini or this file
+---
 
-**Without Gemini?** "Source of Truth" + "Pinned Context" are mandatory, synthesis goes to Claude Chat 3 or manually.
+## 3) Two operating modes
 
-**Pinned Context (copy/paste at the start of each new session):**
+### 3.1 Light (default for small tasks)
+
+Minimal, but reliable:
+- **MOD** (you) + **DEV** + **REV‑G & REV‑C**
+- **ORG** is optional (if absent, MOD “acts as ORG” and remains the **single source of tasks**)
+- **Dual review is required**
+- **No separate conflict‑coordinator chat**: MOD cuts (max 1 conflict round in Light)
+
+*Why Light: minimal friction, while keeping the two highest‑leverage protections (single task channel + dual review).* 
+
+### 3.2 Full (when it escalates)
+
+**Escalate Light → Full (checklist):**
+- [ ] A reviewer returns **High** or **Block**
+- [ ] The conflict is not resolved in **1 round** (Light limit)
+- [ ] The change touches **>3 files** or a **public API**
+- [ ] You (MOD) feel you’re losing overview / risk is growing
+
+In Full mode you add ORG (if not already) and, when needed, `[REV‑COORD]` as a separate chat (default: **Opus 4.5 as progress moderator**).
+
+*Why Full: increased overhead only when risk is real (High/Block, multiple modules, public API, or a conflict that needs proof/tests).* 
+
+---
+
+## 4) Communication topology (email‑only, no meetings)
+
+**Golden rule:** DEV never receives parallel instructions from multiple chats.
+
 ```
+REV/TH → ORG (or MOD)     inputs go into the hub
+ORG/MOD → DEV              tasks from a single channel only
+DEV → ORG/MOD              Delivery Note + artifact + MANIFEST
+ORG/MOD → REV‑G and REV‑C  same artifact, same review brief
+ORG/MOD → REV‑COORD        only for hard conflicts (Full mode)
+```
+
+---
+
+## 5) Non‑negotiable rules
+
+1. **Every chat is a new person.** Put Pinned Context at the top.
+2. **Dual review (DIR) is mandatory** even for small tasks.
+3. **Do not show reviewers each other’s reviews before both finish.**
+4. **If there’s no evidence → the status is Hypothesis.**
+5. **Do not ask “do you agree?”** When there is conflict, request evidence and a falsification test.
+
+### 5.1 Exception: verification without conformity
+
+If you suspect GPT mixed artifacts, you may send a **curated list of items** (not the full review) and ask for labels:
+- **VALID** — confirmed
+- **INVALID** — incorrect
+- **UNCERTAIN** — needs verification
+
+For each label, ask for evidence/test where possible. This is not “seeking agreement” — it’s fact verification.
+
+### 5.2 GPT guardrail (file mix‑ups / long context)
+
+When you notice GPT mixing artifacts or adding facts not present in the current input:
+
+- **Don’t feed the full history.**
+- Send only: **Artifact ID + Pinned Context (5 bullets) + your question**.
+- Insist explicitly: **“Answer only for this artifact.”**
+
+---
+
+## 6) Standard workflow (Light)
+
+```
+1) MOD/ORG → DEV:        Task Order (scope + acceptance + constraints)
+2) DEV → MOD/ORG:        Delivery Note + artifact + MANIFEST
+3) MOD/ORG → REV‑G/C:    same review task, same artifact
+4) If they agree:         fix backlog → DEV
+5) If they disagree:      Conflict Packet → max 1 round → cut or spike/test
+```
+
+**Progress** exists only if something new appears: evidence, a minimal test, narrowed dispute, or a changed stance.
+
+---
+
+## 6.5 Rollback / Abort (when a delivery is not acceptable)
+
+**Triggers:**
+- A reviewer returns **Block** with a STOP‑SHIP issue
+- DEV reports the delivery is fundamentally wrong
+- MOD discovers a critical problem after merge
+
+**Procedure:**
+
+1. MOD marks the artifact as **rejected** (do not delete — keep audit trail)
+2. MOD/ORG creates a new **Task Order** with clear: `revert to <X>` or `fix <Y>`
+3. DEV delivers a **patch** (vMAJOR.MINOR.PATCH+1) with explanation in DELIVERY NOTE + MANIFEST
+
+*Why: artifacts aren’t deleted to preserve audit trail; patch versions provide reproducibility and a clear attempt history.*
+
+---
+
+## 7) Reviewer conflicts (Light: MOD cuts)
+
+### 7.1 Conflict Packet (copy/paste)
+
+```text
+I have a conflict between two reviews. I need your reply in 5–10 lines:
+
+A-claim (other reviewer): <1 sentence>
+B-claim (yours): <1 sentence>
+
+1) Which claim is more correct and WHY?
+2) Evidence (path:line / repro / log). If you have no evidence, label it "hypothesis".
+3) One minimal test that would falsify the wrong claim.
+4) Confidence 0–100%.
+```
+
+### 7.2 Conflict rules
+
+- If both provide **evidence** and still disagree → **mini spike/test** is the default
+- If the dispute is a “judgement call” (UX, trade‑off) → MOD cuts and moves on
+- If the debate repeats without progress → **cut immediately** (don’t waste context)
+
+### 7.3 When to enable a separate `[REV‑COORD]`
+
+Only in Full mode, when it’s High/Block or the dispute is hard and persists.
+
+---
+
+## 8) Pinned Context
+
+### 8.1 PINNED CONTEXT (general)
+
+For TH, DEV, ORG and new chats:
+
+```text
 CURRENT STATE:
-• Active topic: 
-• Last decision (DEC-###): 
-• Open questions: 
-• Next step: 
-• Constraints: 
+• Topic:
+• Goal of this session:
+• Last decision (if any):
+• Open questions (max 3):
+• Constraints (e.g., no migrations, no breaking API):
+• Input reference (link/commit/artifact):
 ```
 
-### Discussion Quality
-- [ ] Each model gets a chance to give opinion
-- [ ] Disagreements are explicitly recorded
-- [ ] Decisions include rationale (not just "what" but also "why")
-- [ ] Trade-offs are documented
+### 8.2 PINNED CONTEXT (review)
 
-**Conflict Resolver (when GPT and Claude disagree):**
-Moderator chooses one of 3 actions:
-1. **Cut** — decision now, move on
-2. **Test/Spike** — proof in code or measurement
-3. **Synthesis** — if confusing, third party summarizes
+Short version for REV‑G/REV‑C (especially when GPT is confused):
 
-### Hygiene Habits
-- [ ] Notepad++ for preparing longer messages
-- [ ] Clean MD file regularly (archive old sessions)
-- [ ] Mark what is DECIDED vs what is still OPEN
-
----
-
-## Templates
-
-### Implementation Brief (for Claude Chat 2)
-
-```
-IMPLEMENTATION BRIEF:
-**Goal:** (1 sentence)
-
-**Scope (in):**
-- 
-
-**Out of scope (don't touch):**
-- 
-
-**Acceptance criteria (must pass):**
-- [ ] 
-- [ ] 
-
-**Constraints:**
-- (e.g., no migrations, no breaking API change, single file, etc.)
-
-**Assumptions (if you must assume):**
-- 
-- ⚠️ If assumptions are not OK → ask moderator before implementation
-
-**Files/Modules (if known):**
-- 
-
-**Test/Verification:**
-- (steps to prove it works)
-```
-
-### Cut (Decision Template)
-
-```
-CUT (date):
-• What was decided: 
-• Why: 
-• Open: 
-• Next step: 
-• Who executes: (Claude Chat 2 / GPT review / me)
-```
-
-### Review Output (what GPT returns after review)
-
-```
-REVIEW:
-**STOP-SHIP issues (if any):**
-- 
-
-**Risky assumptions:**
-- 
-
-**Quick wins (max 5):**
-- 
-
-**Diff/patch suggestions (if any):**
-- 
-
-**Verified by:** (compile/run/tests? yes/no)
-**How verified:** 
-```
-
-### New Topic Template
-
-```
-### Topic: [NAME]
-**Status:** 🟡 In progress | 🟢 Done | 🔴 Blocked
-**Type:** Development | Research | Academic | Strategy
-**Context:** [1-2 sentences]
+```text
+• Artifact: <name_version.zip>
+• Review goal: <1 sentence>
+• Out of scope: <2–3 items>
+• Already decided: <DEC-### or 2 bullets>
+• Open items: <max 3>
 ```
 
 ---
 
-## Open Questions (Backlog)
+## 9) Templates (copy/paste)
 
-Things that weren't cut, but are saved for later.
+### 9.1 REVIEW MEMO (for REV‑G and REV‑C)
 
-| # | Question | Why important | How to resolve |
-|---|----------|---------------|----------------|
-| 1 | | | test / decision / research |
-| 2 | | | |
-| 3 | | | |
+```text
+[REV] REVIEW MEMO
+Target: <artifact / branch / commit>
+
+Risk class: Low | Medium | High
+Recommendation: Merge | Merge with fixes | Block
+
+Findings:
+- ISSUE-001 | Severity: Block/High/Med/Low | Claim | Evidence | Proposed fix
+
+Risk notes:
+- ...
+
+Quick wins (max 5):
+- ...
+
+Questions (max 3):
+- ...
+
+Verified by: compile / run / tests (yes/no)
+How verified: ...
+```
+
+*Note: “Verified by” is at the end because you read findings first, then check how it was verified.*
+
+### 9.2 TASK ORDER (MOD/ORG → DEV)
+
+```text
+[ORG] TASK ORDER
+Goal: <1 sentence>
+
+Tasks:
+- TASK-001: ...
+  Acceptance:
+  - [ ] ...
+  Constraints:
+  - ...
+
+Out of scope:
+- ...
+
+Test/Verification:
+- ...
+```
+
+### 9.3 DELIVERY NOTE (DEV → MOD/ORG)
+
+> **Rule:** DEV always delivers **artifact + MANIFEST.md + DELIVERY NOTE** together.
+
+```text
+[DEV] DELIVERY NOTE
+Artifact: <name + version>
+
+Completed:
+- TASK-001
+
+Blocked/Not done:
+- ...
+
+Assumptions:
+- ...
+
+How to verify:
+1) ...
+2) ...
+```
 
 ---
 
-## Active Topics
+## 10) LOG ENTRY (if you use Gemini)
 
-### Topic 1: [NAME]
-**Status:** 🟡 In progress | 🟢 Done | 🔴 Blocked
+Gemini records only **curated** entries (not every message):
 
-**Context:**
-> Brief description of the problem/question
+```text
+[LOG ENTRY]
+Timestamp: YYYY-MM-DD HH:MM
+Actor: [ORG] | [TH] | [REV-G] | [REV-C] | [DEV] | [MOD]
+Topic: <short>
+Type: Idea | Decision | OpenQuestion | Delivery | Review | Conflict | Patch
+Ref: DEC-### / ISSUE-### / TASK-### (if any)
 
-**Discussion:**
+Content:
+- ...
 
-| Date | Model | Position/Input |
-|------|-------|----------------|
-| | GPT | |
-| | Claude | |
-| | Gemini | |
+Next:
+- ...
+```
 
-**Open questions:**
-- [ ] 
+---
 
-**Decisions:**
+## 11) Artifact naming + MANIFEST (mandatory for deliveries)
+
+> **Rule:** MANIFEST.md is written by **DEV** for every delivery (Gemini/LOG stores only the textual summary, not the binary).
+
+### 11.1 Filename format
+
+```text
+<Project>_vMAJOR.MINOR.PATCH_YYYYMMDD-HHMM_<ActorTag>.zip
+```
+
+Example: `MultiCriteriaAgent_v29.4.3_20260117-1042_DEV.zip`
+
+### 11.2 MANIFEST.md (in the zip root)
+
+```markdown
+# MANIFEST
+
+**Project:** <name>
+**Version:** v#.#.#
+**Date:** YYYY-MM-DD HH:MM
+**Actor:** [DEV]
+
+## Changelog (5–10 bullets)
 - 
 
----
+## Files changed
+- `path/to/file.ext` — short note
 
-## Decision Archive
+## How to run / verify
+1.
+2.
 
-> `DEC-###` is sequential (DEC-001, DEC-002…) and is never deleted.
-> If a decision is superseded, mark as "superseded by DEC-00X".
+## Known limitations
+- 
 
-### [Date] — [Title]
-**Decision ID:** DEC-###
-**Type:** Development | Research | Academic | Strategy
-
-**Problem:**
-> 
-
-**Options considered:**
-1. 
-2. 
-3. 
-
-**Decision:**
-> 
-
-**Rationale:**
-> 
-
-**Dissenting opinions (if any):**
-> 
-
----
-
-## Lessons Learned
-
-What worked, what didn't — for future reference.
-
-| Date | Situation | Lesson |
-|------|-----------|--------|
-| | | |
-
----
-
-## Useful Prompts
-
-### For GPT ET (strategic analysis)
-```
-Analyze the following problem from the perspective of [domain].
-Consider: options, trade-offs, risks, long-term implications.
-Don't give a solution — give a framework for thinking.
-```
-
-### For Claude ET — Chat 1 (debate, NO coding)
-```
-We're discussing [topic]. This is a strategic discussion — no coding.
-GPT ET proposed: [copy GPT response]
-Give your perspective, challenge assumptions, suggest alternatives.
-```
-
-### For Claude — Chat 2 (implementation, NO discussion)
-```
-Based on the following conclusions, implement [X].
-Conclusions: [copy from this file]
-Focus on: [specific aspect]
-Only code/execution — except 1–3 short questions to clarify assumptions if needed.
-```
-
-### For Gemini or Claude Chat 3 (synthesis — optional)
-```
-I have the following discussion between Claude ET and GPT ET.
-Summarize key points, identify agreements and disagreements,
-and suggest what remains unclear.
-```
-
-### For starting a new session
-```
-Continuing work on [topic].
-Current state: [copy from this file]
-Today's focus: [specific goal]
+## Related tasks/issues
+- TASK-###
+- ISSUE-###
 ```
 
 ---
 
-## Meta
+## 12) Minimal documentation discipline
 
-**Created:** [Date]
-**Last modified:** [Date]
-**Version:** 1.2.1 (final)
+- Tags are mandatory only for things you copy into LOG or into this document
+- Decisions and cuts should be short (3–7 bullets) and include “what” + “why”
+- If something is later superseded, write “superseded” and keep the trace (don’t delete history)
 
-> Next version (v1.3) only after 2–3 real tasks.
+**Numbering:**
+- **ISSUE-###** is created by a reviewer (in REVIEW MEMO)
+- **TASK-###** is created by ORG/MOD (in TASK ORDER)
+- **DEC-###** is created by MOD (for decisions/cuts)
+- Relationships are recorded in MANIFEST (“Related tasks/issues”)
+
+---
+
+## 13) Cheat Sheet
+
+### Tags
+
+```
+[MOD]        Moderator (you)
+[ORG]        Organizer/Dispatcher
+[TH]         Thinker (strategy)
+[REV-G]      Reviewer A (GPT)
+[REV-C]      Reviewer B (Claude)
+[DEV]        Implementer
+[LOG]        Recorder (Gemini)
+[REV-COORD]  Conflict coordinator (Full)
+```
+
+### Workflow (Light)
+
+```
+TASK ORDER → DEV → DELIVERY + MANIFEST → REV-G + REV-C → fix/merge or Conflict Packet
+```
+
+### Review Risk/Recommendation
+
+```
+Risk:           Low | Medium | High
+Recommendation: Merge | Merge with fixes | Block
+```
+
+### Escalation Light → Full
+
+```
+[ ] High/Block finding
+[ ] Conflict not resolved in 1 round
+[ ] >3 files or public API
+[ ] You’re losing overview
+```
+
+---
+
+## Changelog
+
+| Version | Date | Changes |
+|---|---|---|
+| 2.5 | Jan 2026 | Quick Start, Cheat Sheet, ISSUE/TASK/DEC numbering, Rollback trigger, PINNED CONTEXT split (general/review), “Verified by” moved to end of REVIEW MEMO |
+| 2.4 | Jan 2026 | Design Rationale (0.1), Rollback procedure, escalation checklist |
+| 2.1 | Jan 2026 | Light/Full modes, Conflict Packet |
+| 2.0 | Jan 2026 | Hub‑and‑spoke, Dual Independent Review (DIR) |
