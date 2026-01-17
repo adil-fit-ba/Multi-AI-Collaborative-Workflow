@@ -1,11 +1,12 @@
 # DIR Protocol: Multi-AI Collaborative Workflow (Manual, Human‑Moderated)
 
-**Version:** 3.8  
+**Version:** 3.9  
 **Date:** January 2026  
 **Status:** Public protocol (Level 1: Manual execution)
 
-> This protocol orchestrates **LLM chat instances** as *workers* (ORG, TH, REV, DEV, COORD, LOG).  
-> **Only MOD is human.** Every worker chat is treated as *stateless* (no assumed memory).
+> **Scope:** This protocol orchestrates **LLM chat instances** as *workers* (ORG, TH, REV, DEV, COORD, LOG).  
+> **Only MOD is human.** Every worker chat is treated as *stateless* (no assumed memory).  
+> Workers must receive **only their onboarding block**, not the full document.
 
 <details>
 <summary><strong>Rationale (for humans)</strong></summary>
@@ -13,6 +14,48 @@
 This document separates (a) human-readable rationale and (b) copy/paste role prompts for LLM workers.  
 Workers should receive **only their role onboarding block**; they do not need the full narrative.
 </details>
+
+---
+
+## Quick Start (Light Mode in 5 steps)
+
+1. **DEV** implements the change → delivers artifact + MANIFEST + DELIVERY NOTE.
+2. **REV-A** (GPT) reviews blind → outputs REVIEW MEMO.
+3. **REV-B** (Claude) reviews blind → outputs REVIEW MEMO.
+4. **MOD** compares memos:
+   - If agree → approve or request minor fixes via Task Order.
+   - If conflict → create Conflict Packet, get one response each, then decide.
+5. **Done.** Log decision as `DEC-###` if significant.
+
+**Escalate to Full Mode** if: High severity, Block recommendation, unresolved conflict, or touches API/DB/deploy.
+
+---
+
+## Cheat Sheet
+
+| Tag | Role | Model | Output |
+|-----|------|-------|--------|
+| `[MOD]` | Moderator | **Human** | Decisions (DEC-###), process control |
+| `[ORG]` | Organizer | GPT-5.2 | TASK ORDER (dispatches to DEV) |
+| `[REV-A]` | Reviewer A | GPT-5.2 | REVIEW MEMO |
+| `[REV-B]` | Reviewer B | Opus 4.5 | REVIEW MEMO |
+| `[DEV]` | Implementer | Sonnet 4.5 | Artifact + MANIFEST + DELIVERY NOTE |
+| `[COORD]` | Coordinator | Opus 4.5 | COORD REPORT + Conflict Packet (if needed) |
+| `[TH-A/B]` | Thinkers | GPT + Opus | TH MEMO (strategy, no code) |
+| `[LOG]` | Archivist | Gemini Pro 3 | LOG ENTRY |
+
+**Hard rules:**
+- REV-A and REV-B **must** use different model families (GPT vs Claude).
+- One role = one chat. Parallelism: `[REV-A2]`, `[DEV-2]`, etc.
+- DEV receives tasks from **ORG only** (hub-and-spoke).
+
+**Escalation triggers (Light → Full):**
+- REV labels issue **High** or **Block**
+- Conflict not resolved after one Conflict Packet round
+- Change touches public API / DB schema / deployment
+- MOD loses overview
+
+**When GPT mixes artifacts:** Start a fresh chat. Paste only the current artifact + Pinned Context. Do not continue polluted threads.
 
 ---
 
@@ -71,7 +114,7 @@ This section is **for humans**. It will go stale; update it whenever you change 
 | Reviewer B | `[REV-B]` | **Opus 4.5** | Independent review; often catches different failure modes. Output = REVIEW MEMO. |
 | Implementer | `[DEV]` | **Sonnet 4.5** (Opus 4.5 for heavy refactors) | Works only from Task Orders. Allowed 1–3 short questions when assumptions block. |
 | Recorder / Archivist (optional) | `[LOG]` | **Gemini Pro 3** | Receives curated LOG ENTRY + MANIFEST summaries. |
-| Coordinator / Arbiter (optional) | `[COORD]` | **Opus 4.5 (Full)** / **MOD (Light)** | Moderates progress: demands evidence, cuts ping‑pong, returns a Coord Report. Can propose a task list to ORG; ORG finalizes and dispatches to DEV. |
+| Coordinator / Arbiter (optional) | `[COORD]` | **Opus 4.5 (Full)** / **MOD (Light)** | Synthesizes reviewer outputs, produces COORD REPORT. Proposes Candidate Tasks → ORG finalizes and dispatches to DEV. |
 
 **Instance rule:** one role = one chat. If you need parallelism: `[REV-A2]`, `[DEV-2]`… (each is a separate chat).
 
@@ -130,12 +173,17 @@ Without forced restatement of current state, models (and humans) drift, mix arti
 </details>
 
 ### 1.4 Hub‑and‑spoke task routing
-The developer receives tasks from **one source only** (ORG; in Light mode MOD may temporarily act as ORG).
+The developer receives tasks from **one source only**: **ORG**.
+
+**Dispatch rule:**
+- REV and COORD may draft **Candidate Tasks**, but they do NOT dispatch to DEV.
+- **ORG** converts Candidate Tasks into the official **TASK ORDER** (with acceptance criteria) and sends to DEV.
+- MOD approves when needed (always for High-risk, optional batch approval for Low/Medium).
 
 <details>
 <summary><strong>Rationale</strong></summary>
 
-Parallel tasking from multiple reviewers creates contradictory instructions and destroys traceability. A single routing point enables deduplication, prioritization, and consistent versioning.
+Parallel tasking from multiple reviewers creates contradictory instructions and destroys traceability. A single routing point enables deduplication, prioritization, and consistent versioning. COORD "knows the issue context," ORG "owns versioning and the channel to DEV."
 </details>
 
 ---
@@ -218,6 +266,7 @@ DIR remains the default because "small" changes can still break things. Micro mo
 - Owns process, decides when to continue vs cut.
 - Assigns DEC IDs and records final decisions.
 - Approves what becomes "source of truth" in documentation.
+- **Orchestrates message flow** between stateless workers (forwards Conflict Packets, collects responses).
 
 **MOD is the only final decision‑maker.**
 
@@ -229,9 +278,11 @@ A single accountable decision point prevents "committee paralysis" and keeps the
 
 ### ORG (Organizer)
 - Maintains project versioning and artifact IDs.
-- Converts reviews/conflicts into **task orders** for DEV.
+- Converts Candidate Tasks (from COORD/REV) into official **TASK ORDER** for DEV.
 - Ensures DEV receives a single, consistent instruction stream.
 - Verifies deliverables include required packaging (MANIFEST, DELIVERY NOTE).
+
+**ORG is the only dispatcher to DEV.**
 
 <details>
 <summary><strong>Rationale</strong></summary>
@@ -253,6 +304,7 @@ Separating implementation from strategy prevents churn and keeps artifact‑boun
 ### REV‑A / REV‑B (Reviewers)
 - Review the same artifact independently using the same brief.
 - Produce a **REVIEW MEMO** with severity + recommendation.
+- May include **Candidate Tasks** (suggestions), but do NOT dispatch to DEV.
 - If disagreement exists, respond via **Conflict Packet** (no "agree?" prompts).
 
 <details>
@@ -264,6 +316,8 @@ Two reviewers with different reasoning styles catch complementary issues. The st
 ### COORD (Coordinator) — one role, two modes
 COORD does **not** implement and does **not** task DEV directly.
 COORD's job is to reduce ambiguity and help MOD decide.
+
+**Hard rule:** COORD does NOT message reviewers or DEV. COORD only produces packets and recommendations. **MOD/ORG forwards messages.**
 
 **Process control:** COORD may recommend whether another evidence/argument round is needed, but **MOD makes the final call**.
 
@@ -278,8 +332,8 @@ COORD's job is to reduce ambiguity and help MOD decide.
 - produces a recommendation to MOD (accept A/B, run test, MOD cut).
 
 **After a MOD decision:**
-- COORD drafts a short **Task Summary** (max 10 bullets) for ORG: what to change, where, and acceptance checks.
-- ORG confirms/version‑tags it and issues the official TASK ORDER to DEV.
+- COORD outputs **Candidate Tasks** for ORG.
+- ORG converts them into the official TASK ORDER and dispatches to DEV.
 
 <details>
 <summary><strong>Rationale</strong></summary>
@@ -356,23 +410,37 @@ Instead: create a **Conflict Packet** that asks for:
 Agreement prompts trigger conformity. Conflict Packets trigger falsifiable reasoning and concrete next steps.
 </details>
 
-### 5.2 Conflict workflow
-1) REV‑A and REV‑B complete blind reviews (same artifact, same brief).
-2) ORG forwards both REVIEW MEMOs to COORD as a single input packet.
-3) COORD produces:
-   - **Agreements** (items both reviewers align on)
-   - **Conflicts** (items that contradict)
-4) If conflicts exist:
-   - COORD prepares a **Conflict Packet** (one question, evidence‑first) and sends it to REV‑A and REV‑B.
-   - REV‑A and REV‑B respond once, **only** to the packet (no new scope).
-   - COORD summarizes outcomes and gives MOD **options + recommendation** (with evidence or a proposed test).
-5) MOD makes the final cut (DEC‑### if needed).
-6) COORD provides "Task Candidates" → ORG converts to Task Orders → DEV executes.
+### 5.2 Conflict workflow (stateless orchestration)
+
+**First COORD chat:**
+1) MOD/ORG forwards both REVIEW MEMOs to COORD.
+2) COORD produces:
+   - **AGREEMENTS** (items both reviewers align on)
+   - **CONFLICTS** (items that contradict)
+3) If CONFLICTS is empty → COORD outputs MOD RECOMMENDATION + CANDIDATE TASKS. Done.
+4) If CONFLICTS is non-empty → COORD outputs ONE **Conflict Packet**. **STOP.**
+
+**MOD orchestration (between COORD chats):**
+5) MOD forwards the Conflict Packet to REV-A and REV-B (same packet to both).
+6) REV-A and REV-B each respond **once** (no new scope, only address the packet).
+7) MOD collects both responses.
+
+**Second COORD chat (only if Conflict Packet was used):**
+8) MOD starts a NEW COORD chat with:
+   - Original REVIEW MEMOs
+   - Conflict Packet responses from REV-A and REV-B
+9) COORD summarizes: what resolved, what remains uncertain.
+10) COORD offers MOD **2–3 options** and recommends one (with evidence).
+11) COORD outputs **CANDIDATE TASKS** for ORG.
+
+**Final steps:**
+12) MOD makes the final cut (DEC-### if needed).
+13) ORG converts Candidate Tasks → TASK ORDER → DEV executes.
 
 <details>
 <summary><strong>Rationale</strong></summary>
 
-A bounded round count prevents endless ping‑pong while still extracting the key information needed for a decision.
+A bounded round count prevents endless ping‑pong while still extracting the key information needed for a decision. Explicit MOD orchestration ensures stateless workers don't assume they can "send" messages.
 </details>
 
 ### 5.3 Conservative default when MOD cannot decide
@@ -408,12 +476,13 @@ YOU ARE A WORKER INSTANCE.
 Only use the information inside this message. Do not assume any continuity from prior chats.
 
 MISSION
-- Turn inputs (reviews, notes, decisions) into a single, coherent Task Order for DEV.
+- Turn inputs (reviews, COORD reports, MOD notes) into a single, coherent TASK ORDER for DEV.
 - Maintain versioning + artifact IDs as the single source of truth.
+- You are the ONLY dispatcher to DEV. REV and COORD propose Candidate Tasks; you finalize them.
 - You do NOT code. You do NOT propose implementation details beyond task breakdown + acceptance criteria.
 
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.8
+Protocol: DIR Protocol v3.9
 Role: [ORG]
 Current artifact: <ArtifactId or branch/tag>
 Session goal (1 sentence): <...>
@@ -423,7 +492,7 @@ Open questions (max 3): <...>
 
 INPUTS
 - Reviewer memos: <paste REV-A + REV-B outputs (or summaries)>
-- Coordinator report (if any): <paste COORD report>
+- Coordinator report (if any): <paste COORD report with Candidate Tasks>
 - Moderator notes (if any): <paste MOD notes>
 
 OUTPUT FORMAT — TASK ORDER (send to MOD for confirmation, then to DEV)
@@ -469,7 +538,7 @@ MISSION
 - You do NOT code. You do NOT write patches.
 
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.8
+Protocol: DIR Protocol v3.9
 Role: [TH-A]
 Current artifact: <ArtifactId or topic>
 Session goal (1 sentence): <...>
@@ -522,7 +591,7 @@ MISSION
 - You do NOT code. You do NOT write patches.
 
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.8
+Protocol: DIR Protocol v3.9
 Role: [TH-B]
 Current artifact: <ArtifactId or topic>
 Session goal (1 sentence): <...>
@@ -567,10 +636,11 @@ Only use the information inside this message. Do not assume any continuity from 
 MISSION
 - Perform an independent review of the artifact.
 - Label every non-trivial claim as [Evidence] or [Hypothesis].
-- Do NOT create tasks. Do NOT code. Output is a REVIEW MEMO only.
+- You may suggest Candidate Tasks, but you do NOT dispatch to DEV. ORG dispatches.
+- Output is a REVIEW MEMO only.
 
 PINNED CONTEXT (Review)
-Protocol: DIR Protocol v3.8
+Protocol: DIR Protocol v3.9
 Role: [REV-A]
 Artifact: <ArtifactId + version>
 Review goal (1 sentence): <...>
@@ -581,7 +651,7 @@ Open questions (max 3): <...>
 INPUT
 - <artifact content / diff / files / notes provided by MOD/ORG>
 
-OUTPUT FORMAT — REVIEW MEMO (copy/paste as-is)
+OUTPUT FORMAT — REVIEW MEMO
 REVIEW MEMO
 Artifact: <ArtifactId>
 Severity: Low / Medium / High
@@ -595,6 +665,10 @@ Findings (ordered by impact):
 Verification suggestions (smallest tests / repro steps):
 - <test 1>
 - <test 2>
+
+Candidate Tasks (optional, for ORG to finalize):
+- <suggested fix 1>
+- <suggested fix 2>
 
 Assumptions / uncertainty:
 - [Hypothesis] <...> | How to verify quickly: <...>
@@ -620,10 +694,11 @@ INDEPENDENCE RULES
 MISSION
 - Perform an independent review of the artifact.
 - Label every non-trivial claim as [Evidence] or [Hypothesis].
-- Do NOT create tasks. Do NOT code. Output is a REVIEW MEMO only.
+- You may suggest Candidate Tasks, but you do NOT dispatch to DEV. ORG dispatches.
+- Output is a REVIEW MEMO only.
 
 PINNED CONTEXT (Review)
-Protocol: DIR Protocol v3.8
+Protocol: DIR Protocol v3.9
 Role: [REV-B]
 Artifact: <ArtifactId + version>
 Review goal (1 sentence): <...>
@@ -634,7 +709,7 @@ Open questions (max 3): <...>
 INPUT
 - <artifact content / diff / files / notes provided by MOD/ORG>
 
-OUTPUT FORMAT — REVIEW MEMO (copy/paste as-is)
+OUTPUT FORMAT — REVIEW MEMO
 REVIEW MEMO
 Artifact: <ArtifactId>
 Severity: Low / Medium / High
@@ -649,6 +724,10 @@ Verification suggestions (smallest tests / repro steps):
 - <test 1>
 - <test 2>
 
+Candidate Tasks (optional, for ORG to finalize):
+- <suggested fix 1>
+- <suggested fix 2>
+
 Assumptions / uncertainty:
 - [Hypothesis] <...> | How to verify quickly: <...>
 
@@ -658,7 +737,7 @@ Questions (max 3, only if blocking):
 
 ---
 
-### 6.6 Onboarding — `[COORD]` Coordinator / Arbiter (conflict resolution)
+### 6.6 Onboarding — `[COORD]` Coordinator (First chat — conflict detection)
 
 ```text
 You are acting as [COORD] in the DIR Protocol.
@@ -666,16 +745,16 @@ You are acting as [COORD] in the DIR Protocol.
 YOU ARE A WORKER INSTANCE (stateless).
 Only use the information inside this message. Do not assume any continuity from prior chats.
 
+HARD RULE: You do NOT message reviewers or DEV. You only produce packets and recommendations. MOD/ORG forwards messages.
+
 MISSION
-- Convert two (or more) reviewer outputs into actionable resolution for the Moderator (MOD),
-  without consensus-seeking or politeness bias.
-- Separate: (A) what reviewers AGREE on, (B) what is in CONFLICT, (C) what is UNKNOWN.
-- If conflicts exist, propose the smallest verification test OR prepare a Conflict Packet for both reviewers.
-- You may propose a Candidate Task List, but you do NOT dispatch to DEV.
-  ORG validates/version-controls tasks and dispatches to DEV after MOD approval.
+- Convert two (or more) reviewer memos into actionable resolution for MOD.
+- Separate: (A) AGREEMENTS, (B) CONFLICTS, (C) UNKNOWN.
+- If conflicts exist, produce ONE Conflict Packet for MOD to forward to reviewers, then STOP.
+- You may propose Candidate Tasks, but you do NOT dispatch to DEV. ORG dispatches after MOD approval.
 
 PINNED CONTEXT (Coordinator)
-Protocol: DIR Protocol v3.8
+Protocol: DIR Protocol v3.9
 Role: [COORD]
 Artifact: <ArtifactId + version>
 Decision goal (1 sentence): <...>
@@ -683,21 +762,20 @@ Already decided (2–5 bullets): <...>
 Constraints / out-of-scope (2–3 bullets): <...>
 
 INPUT
-- Reviewer memo(s): <paste REV-A + REV-B memos here>
+- REV-A memo: <paste here>
+- REV-B memo: <paste here>
 - Optional: additional evidence (paths/lines, build logs, repro steps)
 
-PROCESS YOU MUST FOLLOW
-1) Build an AGREEMENTS list: items both reviewers effectively support (even with different wording).
-2) Build a CONFLICTS list: items where reviewers disagree on fact, severity, or recommendation.
-3) If CONFLICTS is empty → go straight to "MOD RECOMMENDATION" + "CANDIDATE TASKS".
+PROCESS (First COORD chat)
+1) Build AGREEMENTS list: items both reviewers support (even if phrased differently).
+2) Build CONFLICTS list: items where reviewers disagree on fact, severity, or recommendation.
+3) If CONFLICTS is empty:
+   → Output MOD RECOMMENDATION + CANDIDATE TASKS. Done.
 4) If CONFLICTS is non-empty:
-   4.1) Choose ONE of:
-       - (Preferred) Minimal Test: specify the smallest verification step(s) that would decide the conflict.
-       - Conflict Packet Round: prepare ONE Conflict Packet and send it to BOTH reviewers (same packet).
-   4.2) After the round, re-summarize: what resolved, what remains uncertain.
-   4.3) Offer MOD 2–3 options and recommend one.
+   → Output ONE Conflict Packet (below). STOP here. Do not attempt synthesis yet.
+   → MOD will forward the packet to both reviewers and start a second COORD chat with responses.
 
-OUTPUT FORMAT — COORD REPORT (copy/paste as-is)
+OUTPUT FORMAT — COORD REPORT (First chat)
 COORD REPORT
 Artifact: <ArtifactId>
 
@@ -706,28 +784,94 @@ AGREEMENTS (what both support)
 - <item 2>
 
 CONFLICTS (what differs)
-- <Conflict 1: claim A vs claim B> | Decision needed: <...>
+- <Conflict 1: REV-A says X, REV-B says Y> | Decision needed: <...>
 - <Conflict 2: ...>
 
 UNKNOWN / NEEDS CHECK
 - <unknown 1> | Suggested check: <...>
 
-IF CONFLICTS EXIST — CONFLICT PACKET (paste to BOTH reviewers)
-CONFLICT PACKET
+[If CONFLICTS is empty, include these sections:]
+MOD RECOMMENDATION
+Recommend: <action> | Why: <...> | Confidence: <0–100%>
+
+CANDIDATE TASKS FOR ORG
+1) <task> | Acceptance criteria: <...>
+2) <task> | Acceptance criteria: <...>
+
+[If CONFLICTS is non-empty, include this instead:]
+CONFLICT PACKET (for MOD to forward to BOTH reviewers)
 Artifact: <ArtifactId>
 Conflicts to resolve (max 3):
-1) <conflict>  (A says..., B says...)
+1) <conflict> (REV-A says..., REV-B says...)
    Evidence requested: <what evidence would settle it?>
    Minimal test: <what to run/check?>
 2) ...
 
+STOP. Awaiting reviewer responses via MOD.
+```
+
+---
+
+### 6.7 Onboarding — `[COORD]` Coordinator (Second chat — conflict resolution)
+
+```text
+You are acting as [COORD] in the DIR Protocol (Second chat — after Conflict Packet responses).
+
+YOU ARE A WORKER INSTANCE (stateless).
+Only use the information inside this message. Do not assume any continuity from prior chats.
+
+HARD RULE: You do NOT message reviewers or DEV. You only produce recommendations. MOD/ORG forwards messages.
+
+MISSION
+- Synthesize the Conflict Packet responses from both reviewers.
+- Summarize: what resolved, what remains uncertain.
+- Offer MOD 2–3 options and recommend one (with evidence).
+- Output Candidate Tasks for ORG.
+
+PINNED CONTEXT (Coordinator - Resolution)
+Protocol: DIR Protocol v3.9
+Role: [COORD]
+Artifact: <ArtifactId + version>
+Decision goal (1 sentence): <...>
+Already decided (2–5 bullets): <...>
+Constraints / out-of-scope (2–3 bullets): <...>
+
+INPUT
+- Original REV-A memo: <paste or summarize>
+- Original REV-B memo: <paste or summarize>
+- Conflict Packet that was sent: <paste>
+- REV-A response to Conflict Packet: <paste>
+- REV-B response to Conflict Packet: <paste>
+- Optional: additional evidence
+
+PROCESS (Second COORD chat)
+1) For each conflict in the packet:
+   - Did reviewers converge? → Mark as RESOLVED.
+   - Still disagree? → Mark as UNRESOLVED + summarize positions.
+2) For UNRESOLVED conflicts, state what evidence/test would decide it.
+3) Offer MOD 2–3 options (including "run test/spike" if appropriate).
+4) Recommend one option with rationale and confidence.
+5) Output Candidate Tasks for ORG.
+
+OUTPUT FORMAT — COORD REPORT (Resolution)
+COORD REPORT (Resolution)
+Artifact: <ArtifactId>
+
+RESOLVED (after Conflict Packet)
+- <Conflict 1>: Resolved as <X>. Evidence: <...>
+- <Conflict 2>: Resolved as <Y>.
+
+UNRESOLVED (still uncertain)
+- <Conflict 3>: REV-A maintains <...>, REV-B maintains <...>
+  What would decide it: <test/evidence>
+
 MOD OPTIONS + RECOMMENDATION
 Option A: <...> (Pros/Cons, risk)
-Option B: <...>
+Option B: <...> (Pros/Cons, risk)
 Option C: <...> (optional)
 Recommend: <A/B/C> | Why (human-facing): <...> | Confidence: <0–100%>
 
-CANDIDATE TASKS FOR ORG (only after MOD chooses an option)
+CANDIDATE TASKS FOR ORG (after MOD chooses)
 1) <task> | Acceptance criteria: <...>
 2) <task> | Acceptance criteria: <...>
 
@@ -737,7 +881,7 @@ Escalation (Light → Full?)
 
 ---
 
-### 6.7 Onboarding — `[COORD]` Coordinator / Arbiter (idea synthesis)
+### 6.8 Onboarding — `[COORD]` Coordinator (Idea synthesis mode)
 
 ```text
 You are acting as [COORD] in the DIR Protocol (IDEA mode).
@@ -747,14 +891,17 @@ Only use the information inside this message. Do not assume any continuity from 
 
 Use this when the "conflict" is between ideas/options (not code review).
 
+HARD RULE: You do NOT message other workers. You only produce recommendations. MOD/ORG forwards messages.
+
 MISSION
 - Merge competing ideas into 2–3 clear options.
 - List assumptions and trade-offs for each.
+- Identify what would falsify each option quickly.
 - Recommend one option to MOD.
-- Propose candidate next tasks for ORG (if any).
+- Propose Candidate Tasks for ORG (if any).
 
 PINNED CONTEXT (Coordinator - Idea)
-Protocol: DIR Protocol v3.8
+Protocol: DIR Protocol v3.9
 Role: [COORD]
 Topic: <idea/decision topic>
 Decision goal (1 sentence): <...>
@@ -790,7 +937,7 @@ CANDIDATE TASKS FOR ORG (if MOD approves)
 
 ---
 
-### 6.8 Onboarding — `[DEV]` Implementer
+### 6.9 Onboarding — `[DEV]` Implementer
 
 ```text
 You are acting as [DEV] in the DIR Protocol.
@@ -804,7 +951,7 @@ MISSION
 - Ask at most 1–3 short questions ONLY if assumptions block you.
 
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.8
+Protocol: DIR Protocol v3.9
 Role: [DEV]
 Current artifact: <ArtifactId>
 Goal: <1 sentence>
@@ -841,7 +988,7 @@ MANIFEST (list)
 
 ---
 
-### 6.9 Onboarding — `[LOG]` Recorder / Archivist (optional)
+### 6.10 Onboarding — `[LOG]` Recorder / Archivist (optional)
 
 ```text
 You are acting as [LOG] in the DIR Protocol.
@@ -854,7 +1001,7 @@ MISSION
 - Never invent missing details; if unknown, say "unknown".
 
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.8
+Protocol: DIR Protocol v3.9
 Role: [LOG]
 Project: <...>
 Time window: <...>
@@ -890,9 +1037,40 @@ Clear feedback structure enables iteration without turning the repository into a
 
 ---
 
+<details>
+<summary><strong>Operator ergonomics (optional, for manual web-chat mode)</strong></summary>
+
+These tips reduce friction when running DIR manually across browser tabs:
+
+**Layout:**
+- Use 3-column split: Left = artifact/code, Center = current worker chat, Right = reference (memos, Task Order).
+- Keep one "Global Context" note with current: Artifact ID, Goal, Constraints, Decisions, Open questions.
+
+**Clipboard manager:**
+- Enable clipboard history (Win+V on Windows, or use Ditto/CopyQ).
+- Pin frequently-pasted blocks: Pinned Context template, role tags.
+
+**Text expander (AutoHotkey / PowerToys / Espanso):**
+- `/rev-a` → expands to full REV-A onboarding block (with placeholders).
+- `/dev` → expands to DEV onboarding block.
+- `/ctx` → expands to Global Context template.
+
+**Tab naming:**
+- Rename browser tabs: `[REV-A] artifact_v3`, `[DEV] artifact_v3`, etc.
+- Close completed chats promptly to avoid confusion.
+
+**Session hygiene:**
+- Start fresh chats for each role invocation. Do not continue polluted threads.
+- If a model mixes artifacts or hallucinates, abandon the chat and start fresh with clean Pinned Context.
+
+</details>
+
+---
+
 ## Changelog
 
-- **3.8 (Jan 2026):** Fixed missing separator before Section 3. Renumbered Section 8 → Section 7 (removed gap). Expanded TH‑B onboarding (6.3) to full copy/paste template with INDEPENDENCE RULES. Expanded COORD‑IDEA onboarding (6.7) to full template. Updated all role prompts to reference v3.8.
-- **3.7 (Jan 2026):** Fixed formatting; clarified "all workers are LLM chats, only MOD is human"; enforced **cross‑model** DIR; added **Fast‑path decisioning**; added **Conservative default** rule; added **Micro mode** (optional, discouraged); upgraded Conflict Workflow (COORD agreements/conflicts + Conflict Packet round); added optional **DIR effectiveness** logging.
+- **3.9 (Jan 2026):** COORD stateless fix — split into First/Second chat onboarding with explicit MOD orchestration; clarified COORD cannot "send" messages. ORG dispatch rule clarified — REV/COORD propose Candidate Tasks, ORG finalizes and dispatches. Added Quick Start (5 steps) and Cheat Sheet. Added Operator ergonomics (optional). Expanded COORD-IDEA to full template. All role prompts updated to v3.9.
+- **3.8 (Jan 2026):** Fixed missing separator before Section 3. Renumbered sections. Expanded TH‑B and COORD‑IDEA to full templates.
+- **3.7 (Jan 2026):** Clarified "all workers are LLM chats, only MOD is human"; enforced cross‑model DIR; added Fast‑path; added Conservative default; added Micro mode; added DIR effectiveness logging.
 - **3.6 (Jan 2026):** Added COORD role (IDEA/DISPUTE) and role‑specific onboarding blocks.
 - **3.5 (Jan 2026):** Public draft with Light/Full modes and manual execution templates.
