@@ -1,6 +1,6 @@
 # DIR Protocol: Multi-AI Collaborative Workflow (Manual, Human‑Moderated)
 
-**Version:** 3.9  
+**Version:** 4.0  
 **Date:** January 2026  
 **Status:** Public protocol (Level 1: Manual execution)
 
@@ -28,34 +28,6 @@ Workers should receive **only their role onboarding block**; they do not need th
 5. **Done.** Log decision as `DEC-###` if significant.
 
 **Escalate to Full Mode** if: High severity, Block recommendation, unresolved conflict, or touches API/DB/deploy.
-
----
-
-## Cheat Sheet
-
-| Tag | Role | Model | Output |
-|-----|------|-------|--------|
-| `[MOD]` | Moderator | **Human** | Decisions (DEC-###), process control |
-| `[ORG]` | Organizer | GPT-5.2 | TASK ORDER (dispatches to DEV) |
-| `[REV-A]` | Reviewer A | GPT-5.2 | REVIEW MEMO |
-| `[REV-B]` | Reviewer B | Opus 4.5 | REVIEW MEMO |
-| `[DEV]` | Implementer | Sonnet 4.5 | Artifact + MANIFEST + DELIVERY NOTE |
-| `[COORD]` | Coordinator | Opus 4.5 | COORD REPORT + Conflict Packet (if needed) |
-| `[TH-A/B]` | Thinkers | GPT + Opus | TH MEMO (strategy, no code) |
-| `[LOG]` | Archivist | Gemini Pro 3 | LOG ENTRY |
-
-**Hard rules:**
-- REV-A and REV-B **must** use different model families (GPT vs Claude).
-- One role = one chat. Parallelism: `[REV-A2]`, `[DEV-2]`, etc.
-- DEV receives tasks from **ORG only** (hub-and-spoke).
-
-**Escalation triggers (Light → Full):**
-- REV labels issue **High** or **Block**
-- Conflict not resolved after one Conflict Packet round
-- Change touches public API / DB schema / deployment
-- MOD loses overview
-
-**When GPT mixes artifacts:** Start a fresh chat. Paste only the current artifact + Pinned Context. Do not continue polluted threads.
 
 ---
 
@@ -88,6 +60,8 @@ When you start a new chat for a role, treat it as a fresh **worker instance**.
 
 Do **not** paste the rest of this document into the LLM.
 
+**When GPT mixes artifacts:** Start a fresh chat. Paste only the current artifact + Pinned Context. Do not continue polluted threads.
+
 ---
 
 ## Model snapshot (January 2026, optional)
@@ -107,18 +81,23 @@ This section is **for humans**. It will go stale; update it whenever you change 
 
 | Role | Tag | Recommended model | Comment / guardrail |
 |---|---|---|---|
-| Moderator | `[MOD]` | **Human (you)** | Cuts, priorities, decisions, final merge into documentation. |
-| Organizer / Dispatcher (hub) | `[ORG]` | **GPT‑5.2** | Receives inputs, dedupes, maintains versions, produces Task Orders. Does **not** go deep into code. Does **not** code. |
-| Thinker (strategy/methodology) | `[TH-A]`, `[TH-B]` | **GPT‑5.2 + Opus 4.5 (parallel)** | Same brief goes to both (different reasoning styles). They do not code. Use only when you need strategy before implementation. |
-| Reviewer A | `[REV-A]` | **GPT‑5.2** | Independent review. Output = REVIEW MEMO (not tasks). |
-| Reviewer B | `[REV-B]` | **Opus 4.5** | Independent review; often catches different failure modes. Output = REVIEW MEMO. |
-| Implementer | `[DEV]` | **Sonnet 4.5** (Opus 4.5 for heavy refactors) | Works only from Task Orders. Allowed 1–3 short questions when assumptions block. |
-| Recorder / Archivist (optional) | `[LOG]` | **Gemini Pro 3** | Receives curated LOG ENTRY + MANIFEST summaries. |
-| Coordinator / Arbiter (optional) | `[COORD]` | **Opus 4.5 (Full)** / **MOD (Light)** | Synthesizes reviewer outputs, produces COORD REPORT. Proposes Candidate Tasks → ORG finalizes and dispatches to DEV. |
+| Moderator | `[MOD]` | **Human (you)** | Cuts, priorities, decisions (DEC-###), final merge into documentation. |
+| Organizer / Dispatcher (hub) | `[ORG]` | **Opus 4.5** | Receives inputs, dedupes, maintains versions, produces TASK ORDER. Does **not** go deep into code. Does **not** code. Only dispatcher to DEV. |
+| Thinker (strategy/methodology) | `[TH-A]`, `[TH-B]` | **GPT‑5.2 + Opus 4.5 (parallel)** | Same brief goes to both (different reasoning styles). They do not code. Output = TH MEMO. Use only when you need strategy before implementation. |
+| Reviewer (independent, parallel) | `[REV-A]`, `[REV-B]` | **GPT‑5.2 + Opus 4.5 (parallel)** | Same artifact goes to both (blind, independent). **Must** use different model families (GPT vs Claude). Output = REVIEW MEMO. |
+| Implementer | `[DEV]` | **Sonnet 4.5** (Opus 4.5 for heavy refactors) | Works only from Task Orders. Output = Artifact + MANIFEST + DELIVERY NOTE. Allowed 1–3 short questions when assumptions block. |
+| Coordinator / Arbiter (optional) | `[COORD]` | **Opus 4.5 (Full)** / **MOD (Light)** | Synthesizes reviewer outputs, produces COORD REPORT + Conflict Packet (if needed). Proposes Candidate Tasks → ORG finalizes and dispatches to DEV. |
+| Recorder / Archivist (optional) | `[LOG]` | **Gemini Pro 3** | Receives curated summaries. Output = LOG ENTRY. |
 
 **Instance rule:** one role = one chat. If you need parallelism: `[REV-A2]`, `[DEV-2]`… (each is a separate chat).
 
 **Note on TH:** Use TH only when you need strategic/methodological discussion before implementation (e.g., architecture, major trade‑offs). For pure bugfixes and small features, skip TH.
+
+**Escalation triggers (Light → Full):**
+- REV labels issue **High** or recommends **Block**
+- Conflict not resolved after one Conflict Packet round
+- Change touches public API / DB schema / deployment
+- MOD loses overview
 
 ---
 
@@ -482,7 +461,7 @@ MISSION
 - You do NOT code. You do NOT propose implementation details beyond task breakdown + acceptance criteria.
 
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.9
+Protocol: DIR Protocol v4.0
 Role: [ORG]
 Current artifact: <ArtifactId or branch/tag>
 Session goal (1 sentence): <...>
@@ -538,7 +517,7 @@ MISSION
 - You do NOT code. You do NOT write patches.
 
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.9
+Protocol: DIR Protocol v4.0
 Role: [TH-A]
 Current artifact: <ArtifactId or topic>
 Session goal (1 sentence): <...>
@@ -591,7 +570,7 @@ MISSION
 - You do NOT code. You do NOT write patches.
 
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.9
+Protocol: DIR Protocol v4.0
 Role: [TH-B]
 Current artifact: <ArtifactId or topic>
 Session goal (1 sentence): <...>
@@ -640,7 +619,7 @@ MISSION
 - Output is a REVIEW MEMO only.
 
 PINNED CONTEXT (Review)
-Protocol: DIR Protocol v3.9
+Protocol: DIR Protocol v4.0
 Role: [REV-A]
 Artifact: <ArtifactId + version>
 Review goal (1 sentence): <...>
@@ -698,7 +677,7 @@ MISSION
 - Output is a REVIEW MEMO only.
 
 PINNED CONTEXT (Review)
-Protocol: DIR Protocol v3.9
+Protocol: DIR Protocol v4.0
 Role: [REV-B]
 Artifact: <ArtifactId + version>
 Review goal (1 sentence): <...>
@@ -754,7 +733,7 @@ MISSION
 - You may propose Candidate Tasks, but you do NOT dispatch to DEV. ORG dispatches after MOD approval.
 
 PINNED CONTEXT (Coordinator)
-Protocol: DIR Protocol v3.9
+Protocol: DIR Protocol v4.0
 Role: [COORD]
 Artifact: <ArtifactId + version>
 Decision goal (1 sentence): <...>
@@ -829,7 +808,7 @@ MISSION
 - Output Candidate Tasks for ORG.
 
 PINNED CONTEXT (Coordinator - Resolution)
-Protocol: DIR Protocol v3.9
+Protocol: DIR Protocol v4.0
 Role: [COORD]
 Artifact: <ArtifactId + version>
 Decision goal (1 sentence): <...>
@@ -901,7 +880,7 @@ MISSION
 - Propose Candidate Tasks for ORG (if any).
 
 PINNED CONTEXT (Coordinator - Idea)
-Protocol: DIR Protocol v3.9
+Protocol: DIR Protocol v4.0
 Role: [COORD]
 Topic: <idea/decision topic>
 Decision goal (1 sentence): <...>
@@ -951,7 +930,7 @@ MISSION
 - Ask at most 1–3 short questions ONLY if assumptions block you.
 
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.9
+Protocol: DIR Protocol v4.0
 Role: [DEV]
 Current artifact: <ArtifactId>
 Goal: <1 sentence>
@@ -1001,7 +980,7 @@ MISSION
 - Never invent missing details; if unknown, say "unknown".
 
 PINNED CONTEXT (General)
-Protocol: DIR Protocol v3.9
+Protocol: DIR Protocol v4.0
 Role: [LOG]
 Project: <...>
 Time window: <...>
@@ -1069,6 +1048,7 @@ These tips reduce friction when running DIR manually across browser tabs:
 
 ## Changelog
 
+- **4.0 (Jan 2026):** Removed Cheat Sheet (merged info into Work roles table). Consolidated REV-A/REV-B into single parallel row (like TH-A/TH-B). Changed ORG model from GPT-5.2 to Opus 4.5. All role prompts updated to v4.0.
 - **3.9 (Jan 2026):** COORD stateless fix — split into First/Second chat onboarding with explicit MOD orchestration; clarified COORD cannot "send" messages. ORG dispatch rule clarified — REV/COORD propose Candidate Tasks, ORG finalizes and dispatches. Added Quick Start (5 steps) and Cheat Sheet. Added Operator ergonomics (optional). Expanded COORD-IDEA to full template. All role prompts updated to v3.9.
 - **3.8 (Jan 2026):** Fixed missing separator before Section 3. Renumbered sections. Expanded TH‑B and COORD‑IDEA to full templates.
 - **3.7 (Jan 2026):** Clarified "all workers are LLM chats, only MOD is human"; enforced cross‑model DIR; added Fast‑path; added Conservative default; added Micro mode; added DIR effectiveness logging.
